@@ -1,53 +1,47 @@
-from fastapi import FastAPI
-from contextlib import asynccontextmanager
-from app.services.database import get_database, close_mongo_connection
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+from app.agents.employee_agent import get_agent_response
+import uvicorn
+import os
 
-# --- Lifecycle Manager ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    # Startup Logic
-    print("🚀 HR Agent Server Starting...")
-    await get_database()
-    yield
-    # Shutdown Logic
-    print("🛑 HR Agent Server Stopping...")
-    await close_mongo_connection()
+# 1. Initialize the App
+app = FastAPI(title="Innvoix HR Agent API")
 
-# --- App Initialization ---
-app = FastAPI(
-    title="Innvoix HR Agent API",
-    version="1.0",
-    lifespan=lifespan
+# 2. Add CORS (Allows Frontend to talk to Backend)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # In production, change this to your frontend URL
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
-# --- Routes ---
-@app.get("/")
-async def root():
-    """Simple check to see if server is alive."""
-    return {"status": "Active", "system": "Innvoix Agentic Platform"}
+# 3. Define the Data Format
+class ChatRequest(BaseModel):
+    message: str
 
-@app.get("/health")
-async def health_check():
-    """
-    Verifies Database Connectivity. 
-    Frontend will call this to check system status.
-    """
+# 4. Define the Chat Endpoint
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
     try:
-        db = await get_database()
-        if db is None:
-             return {"status": "Error", "detail": "Database not initialized"}
-
-        # List collections to prove read-access
-        collections = await db.list_collection_names()
-        return {
-            "status": "Healthy",
-            "database": "Connected",
-            "collections": collections
-        }
+        print(f"📩 Received: {request.message}")
+        
+        # Call the Agent
+        response = get_agent_response(request.message)
+        
+        print(f"📤 Sending: {response}")
+        return {"response": response}
+    
     except Exception as e:
-        return {"status": "Unhealthy", "error": str(e)}
+        print(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-# --- Run Config (For Debugging) ---
+# 5. Root Endpoint (Just to check if server is running)
+@app.get("/")
+def read_root():
+    return {"status": "Active", "message": "Innvoix HR Agent is Ready 🤖"}
+
+# Run Server (Only if run directly)
 if __name__ == "__main__":
-    import uvicorn
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

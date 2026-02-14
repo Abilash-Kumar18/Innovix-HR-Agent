@@ -44,7 +44,7 @@ def ingest_docs():
     print(f"✂️ Split into {len(chunks)} chunks.")
 
     print("🧠 Creating Embeddings (This uses your Google API)...")
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
     
     vector_db = Chroma.from_documents(
         documents=chunks, 

@@ -2,7 +2,7 @@
 __pycache__/
 *.pyc
 backend/.env
-backend/venv/
+backend/.venv/
 
 # Frontend
 frontend/node_modules/
@@ -11,3 +11,4 @@ frontend/.env
 
 # OS
 .DS_Store
+
