@@ -1,0 +1,8 @@
+
+{
+  "name": "Innvoix HR Agent",
+  "description": "A high-end AI-powered HR portal featuring specialized dashboards for HR managers and employees with intelligent agent integration.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
