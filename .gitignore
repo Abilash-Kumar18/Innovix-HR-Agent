@@ -1,3 +1,8 @@
+# Backend
+__pycache__/
+*.pyc
+backend/.env
+backend/.venv/
 # Logs
 logs
 *.log
@@ -11,6 +16,9 @@ node_modules
 dist
 dist-ssr
 *.local
+
+# OS
+.DS_Store
 
 # Editor directories and files
 .vscode/*
