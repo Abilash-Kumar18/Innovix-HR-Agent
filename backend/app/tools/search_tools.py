@@ -9,7 +9,7 @@ VECTOR_STORE_PATH = "data/vector_store"
 
 def get_vector_store():
     """Re-opens the existing Vector Database."""
-    embeddings = GoogleGenerativeAIEmbeddings(model="models/text-embedding-004")
+    embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
     
     # We load the DB we just created
     vector_db = Chroma(
