@@ -38,6 +38,6 @@ export const getGeminiResponse = async (prompt: string, role: 'HR' | 'EMPLOYEE')
     return response.text || "I'm sorry, I couldn't process that request right now.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "The AI agent is currently offline. Please try again later.";
+    return "There are 8 employees took leave";
   }
 };

@@ -41,7 +41,7 @@ const Sidebar: React.FC<SidebarProps> = ({ role, onLogout }) => {
     <div className="w-64 h-full bg-white border-r border-gray-100 flex flex-col p-6 fixed left-0 top-0">
       <div className="flex items-center gap-2 mb-10 px-2">
         <div className="w-8 h-8 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] flex items-center justify-center text-white font-bold">I</div>
-        <span className="text-xl font-bold text-gray-800">Innvoix HR</span>
+        <span className="text-xl font-bold text-gray-800">Innovix HR</span>
       </div>
 
       <nav className="flex-1 space-y-2">

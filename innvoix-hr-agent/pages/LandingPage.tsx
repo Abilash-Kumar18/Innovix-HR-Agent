@@ -12,7 +12,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSelectRole }) => {
     <div className="min-h-screen flex flex-col items-center justify-center p-6">
       <div className="text-center mb-12">
         <div className="w-20 h-20 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] mx-auto mb-6 flex items-center justify-center text-white text-3xl font-bold shadow-lg">I</div>
-        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Welcome to Innvoix HR Portal</h1>
+        <h1 className="text-4xl md:text-5xl font-bold text-gray-900 mb-4">Welcome to Innovix HR Portal</h1>
         <p className="text-gray-500 text-lg">Select your role to continue to the dashboard.</p>
       </div>
 
@@ -24,7 +24,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSelectRole }) => {
           <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-[#4CAF50] mb-6 group-hover:scale-110 transition-transform">
             <Briefcase size={48} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">I am an HR Manager</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">HR Manager</h2>
           <p className="text-gray-500">Access workforce insights, recruiting tools, and payroll management.</p>
           <div className="mt-8 px-8 py-3 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] text-white font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
             Enter Portal
@@ -38,7 +38,7 @@ const LandingPage: React.FC<LandingPageProps> = ({ onSelectRole }) => {
           <div className="w-24 h-24 rounded-full bg-gray-50 flex items-center justify-center text-[#4CAF50] mb-6 group-hover:scale-110 transition-transform">
             <User size={48} />
           </div>
-          <h2 className="text-2xl font-bold text-gray-800 mb-2">I am an Employee</h2>
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">Employee</h2>
           <p className="text-gray-500">Manage your profile, view payslips, and request leaves.</p>
           <div className="mt-8 px-8 py-3 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] text-white font-semibold opacity-0 group-hover:opacity-100 transition-opacity">
             Enter Portal
