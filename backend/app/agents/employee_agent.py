@@ -6,21 +6,26 @@ from langchain_core.messages import SystemMessage
 from langchain.agents import create_agent
 from app.tools.search_tools import search_policy
 
+# --- NEW IMPORTS FOR AGENTIC TOOLS ---
+from app.tools.hr_tools import get_employee_details, apply_for_leave
+
 load_dotenv()
 
-# 1. Setup the LLM (Use 1.5-flash for stability)
+# 1. Setup the LLM (Kept your exact model)
 llm = ChatGoogleGenerativeAI(
     model="gemini-2.5-flash",
     temperature=0
 )
 
-# 2. Define the Tools
+# 2. Define the Tools (Now with 3 tools!)
 tools = [
     Tool(
         name="Search_HR_Policy",
         func=search_policy,
         description="Useful for questions about leave, remote work, or company rules. Input should be a specific search phrase."
-    )
+    ),
+    get_employee_details,
+    apply_for_leave
 ]
 
 # 3. Create the Agent
@@ -36,18 +41,23 @@ def clean_response(response_content):
         return "".join([block.get("text", "") for block in response_content if "text" in block])
     return str(response_content)
 
-def get_agent_response(user_message: str):
+# --- ADDED employee_id PARAMETER ---
+def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     """
     Entry point for the API.
     """
     try:
-        # Define personality
+        # --- UPDATED PERSONALITY TO USE ALL TOOLS ---
         system_instruction = (
-            "You are a helpful HR Assistant. "
-            "Step 1: ALWAYS use the 'Search_HR_Policy' tool first. "
+            "You are a helpful HR Assistant for team Innvoix. "
+            f"The user currently chatting with you has the Employee ID: {employee_id}. "
+            "Step 1: Decide which tool to use based on the user's request. "
+            "  - Use 'Search_HR_Policy' for general rules. "
+            "  - Use 'get_employee_details' to check their leave balance or profile. "
+            "  - Use 'apply_for_leave' to submit a leave request for them. "
             "Step 2: Read the tool output. "
             "Step 3: Answer the user based ONLY on that output. "
-            "If the tool returns no results, say 'I cannot find that in the policy.'"
+            "If the tool returns no results, say 'I cannot find that information.'"
         )
 
         messages = [
@@ -69,7 +79,12 @@ def get_agent_response(user_message: str):
 
 # --- Test ---
 if __name__ == "__main__":
-    print("🤖 Bot Ready! Asking about Casual Leave...")
-    answer = get_agent_response("How many casual leaves do I have?")
-    print("\n--- FINAL RESPONSE ---\n")
-    print(answer)
+    print("🤖 Bot Ready! Testing Agentic Actions...\n")
+    
+    print("Test 1: Asking for balance...")
+    answer1 = get_agent_response("How many casual leaves do I have left?", employee_id="emp_001")
+    print(f"Response: {answer1}\n")
+    
+    print("Test 2: Applying for leave...")
+    answer2 = get_agent_response("I want to apply for 2 days of casual leave.", employee_id="emp_001")
+    print(f"Response: {answer2}\n")
