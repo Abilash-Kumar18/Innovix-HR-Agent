@@ -8,6 +8,8 @@ MOCK_DB = {
 
 LEAVE_REQUESTS = []
 HR_TICKETS = []  # New database for tickets
+PENDING_APPROVALS = []
+POLICY_DRAFTS = []
 
 MOCK_HOLIDAYS = [
     {"date": "2026-05-01", "name": "May Day"},
@@ -70,9 +72,8 @@ def raise_hr_ticket(employee_id: str, issue_category: str, description: str) -> 
     })
     
     return f"SUCCESS: Ticket {ticket_id} has been raised for the {issue_category} department regarding: '{description}'. The team will contact you soon."
-# Add these new mock databases at the top of hr_tools.py
-PENDING_APPROVALS = []
-POLICY_DRAFTS = []
+
+
 
 @tool
 def onboard_employee(new_hire_name: str, role: str, department: str) -> str:
