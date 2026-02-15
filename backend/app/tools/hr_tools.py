@@ -77,6 +77,7 @@ async def apply_for_leave(employee_id_or_name: str, leave_type: str, days: int) 
         req_id = f"LR-{count + 101}"
         # Add to leave requests using their actual ID
         await db.leave_requests.insert_one({
+            "req_id": req_id,
             "emp_id": actual_emp_id, 
             "employee_name": emp["name"], # Good to store the name here too!
             "type": leave_type, 

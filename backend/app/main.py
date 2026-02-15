@@ -1,8 +1,21 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
+from fastapi import File, UploadFile, HTTPException
+import shutil
+import os
+from bson import ObjectId
 
+# LangChain & Pinecone Imports
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
+from pinecone import Pinecone
+
+# Ensure your data folder exists
+os.makedirs("data/policies", exist_ok=True)
 # Import your agent and the active MongoDB connection!
 from app.agents.employee_agent import get_agent_response
 from app.tools.hr_tools import db 
