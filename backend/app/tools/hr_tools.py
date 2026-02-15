@@ -70,3 +70,62 @@ def raise_hr_ticket(employee_id: str, issue_category: str, description: str) -> 
     })
     
     return f"SUCCESS: Ticket {ticket_id} has been raised for the {issue_category} department regarding: '{description}'. The team will contact you soon."
+# Add these new mock databases at the top of hr_tools.py
+PENDING_APPROVALS = []
+POLICY_DRAFTS = []
+
+@tool
+def onboard_employee(new_hire_name: str, role: str, department: str) -> str:
+    """
+    Useful for HR to start the onboarding workflow for a new hire.
+    Inputs: new_hire_name, role, and department.
+    """
+    print(f"🛠️ TOOL CALLED: Onboarding {new_hire_name} into {department}")
+    new_id = f"emp_00{len(MOCK_DB) + 1}"
+    
+    # 1. Create HR Record
+    MOCK_DB[new_id] = {
+        "name": new_hire_name, 
+        "role": role, 
+        "casual_leaves_left": 12, # Default
+        "sick_leaves_left": 10
+    }
+    
+    # 2. Generate Automated Checklist & IT Provisioning
+    return (
+        f"SUCCESS: Onboarding initiated for {new_hire_name} (ID: {new_id}).\n"
+        f"Workflow Executed:\n"
+        f"- HRIS Record Created.\n"
+        f"- IT Ticket raised for Laptop & Software Access.\n"
+        f"- Automated Welcome Email & Policy Checklist queued for delivery."
+    )
+
+@tool
+def prepare_sensitive_transaction(employee_id: str, action_type: str, details: str) -> str:
+    """
+    CRITICAL: Must be used for sensitive actions like 'salary_change', 'termination', or 'promotion'.
+    This tool DOES NOT execute the action. It prepares it for Human HR approval.
+    """
+    print(f"🛠️ TOOL CALLED: Guardrail triggered for {action_type} on {employee_id}")
+    
+    transaction_id = f"TRX-{len(PENDING_APPROVALS) + 1000}"
+    PENDING_APPROVALS.append({
+        "trx_id": transaction_id,
+        "emp_id": employee_id,
+        "action": action_type,
+        "details": details,
+        "status": "AWAITING_HUMAN_APPROVAL"
+    })
+    
+    return f"GUARDRAIL ACTIVE: The {action_type} transaction for {employee_id} has been drafted (ID: {transaction_id}). It is currently locked and awaiting final Human HR approval. No systems have been updated yet."
+
+@tool
+def draft_policy_update(policy_title: str, new_rules: str) -> str:
+    """
+    Useful when an HR Manager wants to draft or update a company policy.
+    Inputs: policy_title and the new_rules.
+    """
+    print(f"🛠️ TOOL CALLED: Drafting policy - {policy_title}")
+    POLICY_DRAFTS.append({"title": policy_title, "content": new_rules})
+    
+    return f"SUCCESS: Draft for '{policy_title}' has been saved to the policy repository. Would you like me to identify which employees will be affected by this change so we can orchestrate a notification?"

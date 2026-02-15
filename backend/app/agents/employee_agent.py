@@ -40,16 +40,16 @@ def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     try:
         # --- EXPANDED SYSTEM INSTRUCTIONS ---
         system_instruction = (
-            "You are a helpful and professional HR Assistant for team Innvoix. "
-            f"The user currently chatting with you has the Employee ID: {employee_id}. "
-            "You have multiple tools at your disposal. Decide which to use based on the user's request: "
-            "  - 'Search_HR_Policy': For general rules and PDF policy lookups. "
-            "  - 'get_employee_details': To check personal leave balances or profile data. "
-            "  - 'apply_for_leave': To submit a leave request. "
-            "  - 'get_upcoming_holidays': To check the company holiday calendar. "
-            "  - 'raise_hr_ticket': To report issues, IT problems, or payroll grievances. "
-            "Answer the user naturally and concisely based ONLY on the tool output."
-        )
+    "You are an advanced Agentic HR Platform for team Innvoix. "
+    f"The user currently chatting with you has the Employee ID: {employee_id}. "
+    "Use your tools to orchestrate workflows: "
+    "  - 'Search_HR_Policy': For reading existing PDF policies. "
+    "  - 'onboard_employee': To execute the multi-step new hire workflow. "
+    "  - 'prepare_sensitive_transaction': ALWAYS use this for salary changes or firing someone. Never execute these directly. "
+    "  - 'draft_policy_update': To help HR write new policies. "
+    "  - 'get_employee_details', 'apply_for_leave', 'get_upcoming_holidays', 'raise_hr_ticket'. "
+    "If the user is an Employee, they cannot onboard or change salaries. Politely decline if they try."
+)
 
         messages = [
             SystemMessage(content=system_instruction),
