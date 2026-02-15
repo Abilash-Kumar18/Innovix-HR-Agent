@@ -64,8 +64,16 @@ async def apply_for_leave(employee_id: str, leave_type: str, days: int) -> str:
 @tool
 async def get_upcoming_holidays() -> str:
     """Useful to find out the upcoming official company holidays and festival days off."""
-    print("🛠️ TOOL CALLED: Fetching company holidays")
-    holidays_str = "\n".join([f"- {h['name']} ({h['date']})" for h in MOCK_HOLIDAYS])
+    print("🛠️ TOOL CALLED: Fetching company holidays from MongoDB")
+    
+    # Fetch from a new 'holidays' collection in MongoDB
+    cursor = db.holidays.find().sort("date", 1) 
+    holidays = await cursor.to_list(length=20)
+    
+    if not holidays:
+        return "I couldn't find any upcoming holidays in the database."
+        
+    holidays_str = "\n".join([f"- {h['name']} ({h['date']})" for h in holidays])
     return f"Here are the upcoming company holidays:\n{holidays_str}"
 
 @tool
@@ -130,6 +138,29 @@ async def prepare_sensitive_transaction(employee_id: str, action_type: str, deta
     })
     
     return f"GUARDRAIL ACTIVE: The {action_type} transaction for {employee_id} has been drafted (ID: {transaction_id}). It is currently locked and awaiting final Human HR approval. No systems have been updated yet."
+
+@tool
+async def list_employees(department: str = None) -> str:
+    """
+    Useful for getting a list of all employees. 
+    Can optionally filter by department (e.g., 'Sales', 'Engineering').
+    """
+    print(f"🛠️ TOOL CALLED: Listing employees (Department filter: {department})")
+    
+    # If a department is provided, filter by it. Otherwise, get everyone.
+    query = {"department": department} if department else {}
+    
+    # Fetch up to 50 employees from MongoDB
+    cursor = db.employees.find(query)
+    employees = await cursor.to_list(length=50)
+    
+    if not employees:
+        return "No employees found in the database."
+        
+    # Format the list nicely
+    emp_list = "\n".join([f"- {emp.get('name', 'Unknown')} (ID: {emp.get('employee_id', 'N/A')}, Role: {emp.get('role', 'N/A')})" for emp in employees])
+    
+    return f"Here is the requested employee list:\n{emp_list}"
 
 @tool
 async def draft_policy_update(policy_title: str, new_rules: str) -> str:
