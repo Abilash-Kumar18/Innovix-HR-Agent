@@ -88,26 +88,6 @@ async def get_policy_drafts():
     return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
 
 
-# ==========================================
-# 🔒 PUT ENDPOINTS (Human-in-the-Loop Actions)
-# ==========================================
-@app.put("/api/approvals/{trx_id}")
-async def handle_approval(trx_id: str, action: ApprovalAction):
-    """
-    When HR clicks 'Approve' or 'Reject' on the frontend, this updates the database.
-    """
-    print(f"🛡️ HR Action: Marking {trx_id} as {action.status}")
-    
-    result = await db.pending_approvals.update_one(
-        {"trx_id": trx_id},
-        {"$set": {"status": action.status}}
-    )
-    
-    if result.modified_count == 0:
-        raise HTTPException(status_code=404, detail="Transaction not found or already updated.")
-        
-    return {"status": "success", "message": f"Transaction {trx_id} successfully marked as {action.status}"}
-
 
 # ==========================================
 # Root Endpoint
@@ -115,6 +95,48 @@ async def handle_approval(trx_id: str, action: ApprovalAction):
 @app.get("/")
 def read_root():
     return {"status": "Active", "message": "Innvoix Backend is Connected to MongoDB 🚀"}
+
+# ==========================================
+# 🔒 PUT ENDPOINTS (Approvals & Removals)
+# ==========================================
+
+@app.put("/api/approvals/{trx_id}")
+async def handle_approval(trx_id: str, action: ApprovalAction):
+    """Handles sensitive transactions like Salary Hikes."""
+    print(f"🛡️ HR Action: Marking {trx_id} as {action.status}")
+    
+    if action.status == "APPROVED":
+        # 1. Remove it from the pending queue permanently
+        result = await db.pending_approvals.delete_one({"trx_id": trx_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Transaction not found.")
+            
+        return {"status": "success", "message": f"Transaction {trx_id} approved and removed from queue."}
+    else:
+        # If rejected, just update the status so HR has a record of the rejection
+        await db.pending_approvals.update_one({"trx_id": trx_id}, {"$set": {"status": "REJECTED"}})
+        return {"status": "success", "message": f"Transaction {trx_id} rejected."}
+
+
+@app.put("/api/leaves/{req_id}")
+async def handle_leave_approval(req_id: str, action: ApprovalAction):
+    """New Endpoint: Handles Leave Requests."""
+    print(f"🛡️ HR Action: Marking Leave {req_id} as {action.status}")
+    
+    if action.status == "APPROVED":
+        # 1. Remove it from the leave requests queue permanently
+        result = await db.leave_requests.delete_one({"req_id": req_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Leave request not found.")
+            
+        return {"status": "success", "message": f"Leave {req_id} approved and cleared from dashboard."}
+    else:
+        # Hackathon Tip: If HR rejects a leave, you would normally run an update_one() 
+        # on the employees collection here to refund their leave balance!
+        await db.leave_requests.update_one({"req_id": req_id}, {"$set": {"status": "REJECTED"}})
+        return {"status": "success", "message": f"Leave {req_id} rejected."}
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
