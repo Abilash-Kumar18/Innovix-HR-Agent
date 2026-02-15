@@ -4,6 +4,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.tools import Tool
 from langchain_core.messages import SystemMessage
 from langchain.agents import create_agent
+import asyncio
 from app.tools.search_tools import search_policy
 
 # --- UPDATED IMPORTS ---
@@ -44,7 +45,7 @@ def clean_response(response_content):
         return "".join([block.get("text", "") for block in response_content if "text" in block])
     return str(response_content)
 
-def get_agent_response(user_message: str, employee_id: str = "emp_001"):
+async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     global current_key_idx
     
     system_instruction = (
@@ -59,14 +60,14 @@ def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     # --- 2. THE FALLBACK LOOP ---
     for attempt in range(len(VALID_KEYS)):
         try:
-            # Generate the agent with the current key
             agent_executor = get_agent_executor()
             
-            # Attempt to get a response
-            response = agent_executor.invoke({"messages": messages})
+            # THE FIX: Use 'await' and 'ainvoke' to handle the MongoDB tools
+            response = await agent_executor.ainvoke({"messages": messages})
+            
             raw_content = response["messages"][-1].content
             return clean_response(raw_content)
-            
+        
         except Exception as e:
             error_msg = str(e).lower()
             # If the error is related to rate limits or quotas
@@ -80,9 +81,9 @@ def get_agent_response(user_message: str, employee_id: str = "emp_001"):
                 
     return "❌ SYSTEM ERROR: All fallback API keys have exhausted their quotas!"
 
-# --- TEST THE NEW TOOLS ---
 # --- INTERACTIVE TERMINAL TEST ---
-if __name__ == "__main__":
+async def run_interactive_chat():
+    """We wrap the loop in an async function so we can use 'await'"""
     print("==================================================")
     print("🤖 Innovix HR Agentic AI is ONLINE!")
     print("Type 'exit' to quit the chat.")
@@ -98,8 +99,12 @@ if __name__ == "__main__":
             print("Shutting down Agent...")
             break
             
-        # Call the agent
-        answer = get_agent_response(user_text, employee_id=current_user_id)
+        # THE FIX: We must 'await' the async function!
+        answer = await get_agent_response(user_text, employee_id=current_user_id)
         
         print(f"\n🤖 Agent: {answer}\n")
         print("-" * 50)
+
+if __name__ == "__main__":
+    # THE FIX: Tell asyncio to run our async chat function
+    asyncio.run(run_interactive_chat())
