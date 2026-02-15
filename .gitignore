@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 backend/.env
 backend/.venv/
+backend/.venv1/
 # Logs
 logs
 *.log
