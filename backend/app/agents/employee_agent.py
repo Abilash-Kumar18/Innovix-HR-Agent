@@ -49,7 +49,7 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     global current_key_idx
     
     system_instruction = (
-        "You are an advanced Agentic HR Platform for team Innvoix. "
+        "You are an advanced Agentic HR Platform for team Innovix. "
         f"The user currently chatting with you has the Employee ID: {employee_id}. "
         "Use your tools to orchestrate workflows: 'Search_HR_Policy', 'onboard_employee', "
         "'prepare_sensitive_transaction', 'draft_policy_update', 'get_employee_details', "
