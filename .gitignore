@@ -1,6 +1,9 @@
-# Backend
+# =========================
+# BACKEND (Python / FastAPI)
+# =========================
 __pycache__/
 *.pyc
+*.pyo
 backend/.env
 backend/.venv/
 backend/.venv1/
@@ -11,21 +14,14 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
-*.local
-
-# OS
+# =========================
+# OS & EDITORS
+# =========================
 .DS_Store
-
-# Editor directories and files
 .vscode/*
 !.vscode/extensions.json
 .idea
-.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
