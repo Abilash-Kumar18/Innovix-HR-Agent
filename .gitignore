@@ -6,6 +6,24 @@ __pycache__/
 *.pyo
 backend/.env
 backend/.venv/
+backend/data/vector_store/  # <-- Added: Prevents pushing your ChromaDB memory
+node_modules/
+# =========================
+# FRONTEND (React / Vite)
+# =========================
+frontend/node_modules/
+dist/
+dist-ssr/
+*.local
+frontend/.env* # <-- Added: Secures Vite environment variables
+
+# =========================
+# LOGS
+# =========================
+logs/
+backend/.venv1/
+# Logs
+logs
 backend/.venv1/
 # Logs
 logs

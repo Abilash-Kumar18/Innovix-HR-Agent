@@ -1,14 +1,24 @@
+# Web Framework
 fastapi
 uvicorn
-python-dotenv
-pymongo
+
+# Database (MongoDB)
 motor
-langchain
-langchain-google-genai
-langchain-text-splitters
+certifi
+
+# AI & LangChain Ecosystem
+langgraph
+langchain-core
 langchain-community
-chromadb
+langchain-google-genai
+
+# Vector Database (Pinecone)
+pinecone-client
+langchain-pinecone
+
+# Document Processing
 pypdf
-tiktoken
-python-multipart
-requests
+
+# Utilities
+python-dotenv
+pydantic
