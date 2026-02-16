@@ -1,0 +1,25 @@
+# Web Framework
+fastapi
+uvicorn
+
+# Database (MongoDB)
+motor
+certifi
+
+# AI & LangChain Ecosystem
+langgraph
+langchain-core
+langchain-community
+langchain-google-genai
+langchain
+
+# Vector Database (Pinecone)
+pinecone-client
+langchain-pinecone
+
+# Document Processing
+pypdf
+
+# Utilities
+python-dotenv
+pydantic
