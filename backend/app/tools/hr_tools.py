@@ -123,31 +123,76 @@ async def raise_hr_ticket(employee_id: str, issue_category: str, description: st
     return f"SUCCESS: Ticket {ticket_id} has been raised for the {issue_category} department regarding: '{description}'. The team will contact you soon."
 
 @tool
-async def onboard_employee(new_hire_name: str, role: str, department: str) -> str:
-    """Useful for HR to start the onboarding workflow for a new hire."""
+async def onboard_employee(new_hire_name: str, role: str, department: str, bank_account: str, emergency_contact: str) -> str:
+    """
+    Useful for HR to officially onboard a new hire. 
+    MUST include bank_account and emergency_contact details.
+    """
     print(f"🛠️ TOOL CALLED: Onboarding {new_hire_name} into {department}")
     
     count = await db.employees.count_documents({})
-    new_id = f"emp_00{count + 1}"
+    new_id = f"emp_{count + 100}" # Starts IDs at emp_100 to avoid clashes
     
-    # Create HR Record in MongoDB
+    # Inserts into the HRIS database
     await db.employees.insert_one({
         "employee_id": new_id,
         "name": new_hire_name, 
         "role": role, 
         "department": department,
-        "salary": 60000,
+        "bank_account": bank_account,
+        "emergency_contact": emergency_contact,
+        "salary": 60000, 
         "casual_leaves_left": 12, 
-        "sick_leaves_left": 10
+        "sick_leaves_left": 10,
+        "status": "Active"
     })
     
-    return (
-        f"SUCCESS: Onboarding initiated for {new_hire_name} (ID: {new_id}).\n"
-        f"Workflow Executed:\n"
-        f"- HRIS Record Created.\n"
-        f"- IT Ticket raised for Laptop & Software Access.\n"
-        f"- Automated Welcome Email & Policy Checklist queued for delivery."
+    return f"SUCCESS: Onboarding initiated for {new_hire_name} (ID: {new_id}). Bank and contact info securely stored."
+
+@tool
+async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str:
+    """
+    Useful for HR to orchestrate cross-system offboarding.
+    Triggers HRIS termination, IT access revocation, and Payroll final settlement.
+    """
+    print(f"🛠️ TOOL CALLED: Multi-System Offboarding for {employee_id_or_name} on {offboard_date}")
+    
+    # Smart lookup: ID or Name
+    emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
+    if not emp:
+        emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
+        
+    if not emp: 
+        return f"Cannot offboard: Employee '{employee_id_or_name}' not found."
+    
+    actual_emp_id = emp["employee_id"]
+    emp_name = emp["name"]
+    
+    # 1. Update HRIS System (employees collection)
+    await db.employees.update_one(
+        {"employee_id": actual_emp_id}, 
+        {"$set": {"status": "Terminated", "offboard_date": offboard_date}}
     )
+    
+    # 2. Trigger IT System (it_tickets collection)
+    await db.it_tickets.insert_one({
+        "emp_id": actual_emp_id,
+        "employee_name": emp_name,
+        "task": "Revoke laptop, email, and system access",
+        "due_date": offboard_date,
+        "status": "Pending IT Action"
+    })
+    
+    # 3. Trigger Payroll System (payroll collection)
+    await db.payroll.insert_one({
+        "emp_id": actual_emp_id,
+        "employee_name": emp_name,
+        "action": "Process final settlement and tax forms",
+        "effective_date": offboard_date,
+        "status": "Pending Payroll Action"
+    })
+    
+    return f"SUCCESS: Offboarding orchestrated for {emp_name}. HRIS updated to Terminated, IT access revocation ticket created, and Payroll notified."
 
 @tool
 async def prepare_sensitive_transaction(employee_id: str, action_type: str, details: str) -> str:
