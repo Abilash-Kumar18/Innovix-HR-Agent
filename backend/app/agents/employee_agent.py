@@ -8,7 +8,7 @@ import asyncio
 from app.tools.search_tools import search_policy
 
 # --- UPDATED IMPORTS ---
-from app.tools.hr_tools import draft_policy_update, get_employee_details, apply_for_leave, get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, raise_hr_ticket, list_employees
+from app.tools.hr_tools import db,draft_policy_update, get_employee_details, apply_for_leave, get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, raise_hr_ticket, list_employees
 
 load_dotenv()
 
@@ -46,37 +46,52 @@ def clean_response(response_content):
     return str(response_content)
 
 async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
+    # 1. THE FIX: This must be the very first line inside the function!
     global current_key_idx
     
+    # 2. THEN do your Identity & Access Lookup
+    user_record = await db.employees.find_one({"employee_id": employee_id.lower()})
+    
+    if user_record:
+        user_name = user_record.get("name", "Unknown")
+        user_department = user_record.get("department", "Employee")
+        
+        # Define the security clearance
+        is_hr_admin = user_department.lower() == "hr" or user_department.lower() == "human resources"
+        role_title = "HR Administrator" if is_hr_admin else f"{user_department} Employee"
+    else:
+        user_name = "Guest"
+        role_title = "Unverified User"
+        is_hr_admin = False
+
+    # --- 2. THE DYNAMIC SECURITY PROMPT ---
     system_instruction = (
-        "You are an advanced Agentic HR Platform for team Innovix. "
-        f"The user currently chatting with you has the Employee ID: {employee_id}. "
-        "Use your tools to orchestrate workflows: 'Search_HR_Policy', 'onboard_employee', "
-        "'prepare_sensitive_transaction', 'draft_policy_update', 'get_employee_details', "
-        "'apply_for_leave', 'get_upcoming_holidays', 'raise_hr_ticket', 'list_employees'.",
+        f"You are the Innvoix HR Agentic AI. "
+        f"You are currently chatting with {user_name} (ID: {employee_id}). "
+        f"Their official role/department is: {role_title}. "
+        "\n\n--- SECURITY & ACCESS CONTROL RULES ---\n"
+        "1. Standard Employees can ONLY ask about policies, check their own leave balance, apply for leave, and raise tickets.\n"
+        "2. ONLY HR Administrators have the security clearance to use these tools: 'onboard_employee', "
+        "'prepare_sensitive_transaction', 'draft_policy_update', 'add_company_holiday', and 'list_employees'.\n"
+        "3. If a Standard Employee asks you to perform an HR-only action, you MUST completely refuse, "
+        "address them by name, and tell them they do not have the required security clearance."
     )
+    
     messages = [SystemMessage(content=system_instruction), ("user", user_message)]
 
-    # --- 2. THE FALLBACK LOOP ---
+    # --- 3. THE FALLBACK LOOP (Keep your existing execution loop) ---
     for attempt in range(len(VALID_KEYS)):
         try:
             agent_executor = get_agent_executor()
-            
-            # THE FIX: Use 'await' and 'ainvoke' to handle the MongoDB tools
             response = await agent_executor.ainvoke({"messages": messages})
-            
             raw_content = response["messages"][-1].content
             return clean_response(raw_content)
-        
         except Exception as e:
             error_msg = str(e).lower()
-            # If the error is related to rate limits or quotas
             if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:
                 print(f"⚠️ API Key {current_key_idx + 1} exhausted. Rotating to next key...")
-                # Move to the next key
                 current_key_idx = (current_key_idx + 1) % len(VALID_KEYS)
             else:
-                # If it's a different error (like a typo in your code), raise it normally
                 return f"Error processing request: {str(e)}"
                 
     return "❌ SYSTEM ERROR: All fallback API keys have exhausted their quotas!"
