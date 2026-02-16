@@ -65,8 +65,9 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         is_hr_admin = False
 
     # --- 2. THE DYNAMIC SECURITY PROMPT ---
+    # --- 2. THE DYNAMIC SECURITY PROMPT ---
     system_instruction = (
-        f"You are the Innvoix HR Agentic AI. "
+        f"You are the Innovix HR Agentic AI. "
         f"You are currently chatting with {user_name} (ID: {employee_id}). "
         f"Their official role/department is: {role_title}. "
         "\n\n--- SECURITY & ACCESS CONTROL RULES ---\n"
@@ -79,7 +80,11 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         "4. ONBOARDING: If an HR Admin asks to onboard someone, you MUST NOT call the tool immediately. "
         "You must first converse with them to collect the new hire's Bank Account Number and Emergency Contact Number. "
         "Only call the onboard tool once you have all the data.\n"
-        "5. OFFBOARDING: When offboarding, ensure you ask for the specific offboard date if it wasn't provided."
+        "5. OFFBOARDING: When offboarding, ensure you ask for the specific offboard date if it wasn't provided.\n"
+        "\n--- DATA PRIVACY & MASKING RULES ---\n"
+        "6. If you retrieve an employee's personal details (like Bank Account, SSN, or Emergency Contact) from the database, "
+        "you MUST dynamically mask the data in your final response to the user. "
+        "For example, if the bank account is 123456789, output it as *****6789. Never display the full sensitive number."
     )
     # --- MEMORY MANAGEMENT ---
     # 1. Add the user's new message to the memory

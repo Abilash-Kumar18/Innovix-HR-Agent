@@ -3,6 +3,7 @@ import certifi
 from dotenv import load_dotenv
 from langchain_core.tools import tool
 from motor.motor_asyncio import AsyncIOMotorClient
+from datetime import datetime
 
 load_dotenv()
 
@@ -19,7 +20,15 @@ MOCK_HOLIDAYS = [
     {"date": "2026-11-08", "name": "Diwali"}
 ]
 
-# --- EXISTING TOOLS (Upgraded to MongoDB) ---
+# --- AUDIT LOGGING HELPER ---
+async def log_audit_action(action_name: str, details: str):
+    """Silently logs AI actions to MongoDB for enterprise compliance."""
+    await db.audit_logs.insert_one({
+        "timestamp": datetime.utcnow(),
+        "action": action_name,
+        "details": details,
+        "performed_by": "Agentic_AI_Core"
+    })
 
 @tool
 async def get_employee_details(employee_id_or_name: str) -> str:
@@ -146,7 +155,10 @@ async def onboard_employee(new_hire_name: str, role: str, department: str, bank_
         "sick_leaves_left": 10,
         "status": "Active"
     })
-    
+    await log_audit_action(
+        action_name="ONBOARD_EMPLOYEE", 
+        details=f"Onboarded {new_hire_name} (ID: {new_id}) to {department}."
+    )
     return f"SUCCESS: Onboarding initiated for {new_hire_name} (ID: {new_id}). Bank and contact info securely stored."
 
 @tool
@@ -191,7 +203,10 @@ async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str
         "effective_date": offboard_date,
         "status": "Pending Payroll Action"
     })
-    
+    await log_audit_action(
+        action_name="OFFBOARD_EMPLOYEE", 
+        details=f"Offboarded {emp_name} (ID: {actual_emp_id}) on {offboard_date}."
+    )
     return f"SUCCESS: Offboarding orchestrated for {emp_name}. HRIS updated to Terminated, IT access revocation ticket created, and Payroll notified."
 
 @tool
@@ -209,7 +224,10 @@ async def prepare_sensitive_transaction(employee_id: str, action_type: str, deta
         "details": details,
         "status": "AWAITING_HUMAN_APPROVAL"
     })
-    
+    await log_audit_action(
+        action_name="PREPARE_SENSITIVE_TRANSACTION", 
+        details=f"Prepared sensitive transaction {transaction_id} for employee {employee_id} ({action_type})."
+    )
     return f"GUARDRAIL ACTIVE: The {action_type} transaction for {employee_id} has been drafted (ID: {transaction_id}). It is currently locked and awaiting final Human HR approval. No systems have been updated yet."
 
 @tool
