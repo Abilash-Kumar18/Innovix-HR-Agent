@@ -7,6 +7,7 @@ __pycache__/
 backend/.env
 backend/.venv/
 backend/.venv1/
+
 # Logs
 logs
 *.log
@@ -22,6 +23,25 @@ pnpm-debug.log*
 .vscode/*
 !.vscode/extensions.json
 .idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# OS
+.DS_Store
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
 *.suo
 *.ntvs*
 *.njsproj
