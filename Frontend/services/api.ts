@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // 1. Point to your Backend
 // If running locally, use localhost. If using ngrok, use the ngrok URL.
-const API_URL = "http://127.0.0.1:8000"; 
+const API_URL = "https://innovix-hr-agent.onrender.com"; 
 
 // Create a configured axios instance
 export const api = axios.create({
