@@ -5,7 +5,7 @@ uvicorn
 # Database (MongoDB)
 motor
 certifi
-
+python-multipart
 # AI & LangChain Ecosystem
 langgraph
 langchain-core
