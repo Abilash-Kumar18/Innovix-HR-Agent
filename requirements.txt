@@ -10,12 +10,14 @@ certifi
 langgraph
 langchain-core
 langchain-community
-langchain-google-genai
 langchain
+
+langchain-pinecone>=0.2.0
+langchain-google-genai>=2.0.0
 
 # Vector Database (Pinecone)
 pinecone-client
-langchain-pinecone
+
 
 # Document Processing
 pypdf
