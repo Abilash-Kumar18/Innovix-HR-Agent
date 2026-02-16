@@ -47,7 +47,7 @@ pnpm-debug.log*
 *.sln
 *.sw?
 
-node_modules
+node_modules/
 dist
 dist-ssr
 *.local
