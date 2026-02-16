@@ -1,8 +1,31 @@
-# Backend
+# =========================
+# BACKEND (Python / FastAPI)
+# =========================
 __pycache__/
 *.pyc
+*.pyo
 backend/.env
 backend/.venv/
+backend/data/vector_store/  # <-- Added: Prevents pushing your ChromaDB memory
+node_modules/
+# =========================
+# FRONTEND (React / Vite)
+# =========================
+Frontend/node_modules/
+dist/
+dist-ssr/
+*.local
+frontend/.env* # <-- Added: Secures Vite environment variables
+
+# =========================
+# LOGS
+# =========================
+logs/
+backend/.venv1/
+# Logs
+logs
+backend/.venv1/
+
 # Logs
 logs
 *.log
@@ -10,7 +33,19 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-lerna-debug.log*
+
+# =========================
+# OS & EDITORS
+# =========================
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
 Frontend/node_modules/
 dist/
