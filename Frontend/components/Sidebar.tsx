@@ -8,11 +8,6 @@ interface SidebarProps {
   isCollapsed: boolean;
   toggleSidebar: () => void;
   role?: 'hr' | 'employee';
-  user?: {
-    name: string;
-    role: string;
-    image: string;
-  };
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -21,8 +16,7 @@ const Sidebar: React.FC<SidebarProps> = ({
   onLogout, 
   isCollapsed,
   toggleSidebar,
-  role = 'hr', 
-  user 
+  role = 'hr' 
 }) => {
   
   const allMenuItems = [
@@ -44,7 +38,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       `}
     >
       
-      {/* 1. Header & Toggle */}
+      {/* 1. Header & Hamburger Toggle */}
       <div className={`flex items-center mb-10 ${isCollapsed ? 'justify-center flex-col gap-4' : 'justify-between'}`}>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lime-500 to-green-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-lime-200 shrink-0">
@@ -53,8 +47,10 @@ const Sidebar: React.FC<SidebarProps> = ({
           {!isCollapsed && <h1 className="text-2xl font-bold text-slate-800 tracking-tight whitespace-nowrap">Innvoix HR</h1>}
         </div>
         
-        {/* Hamburger Toggle */}
-        <button onClick={toggleSidebar} className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors">
+        <button 
+          onClick={toggleSidebar} 
+          className="p-2 hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+        >
           <Menu size={20} />
         </button>
       </div>
@@ -81,35 +77,19 @@ const Sidebar: React.FC<SidebarProps> = ({
         ))}
       </nav>
 
-      {/* 3. User Profile */}
+      {/* 3. Logout Section (Replaces Profile Details) */}
       <div className="pt-6 border-t border-slate-100">
-        <div className={`flex items-center gap-3 ${isCollapsed ? 'justify-center flex-col' : ''}`}>
-          
-          <div 
-            onClick={() => setActivePage('profile')}
-            className={`flex items-center gap-3 flex-1 cursor-pointer hover:bg-slate-50 p-2 rounded-lg transition-colors group ${isCollapsed ? 'justify-center' : ''}`}
-          >
-            <img 
-              src={user?.image || 'https://i.pravatar.cc/150?img=32'} 
-              alt="User" 
-              className="w-10 h-10 rounded-full border-2 border-white shadow-sm group-hover:border-lime-200 transition-colors object-cover shrink-0"
-            />
-            {!isCollapsed && (
-              <div className="overflow-hidden text-left">
-                <h4 className="text-sm font-bold text-slate-800 truncate">{user?.name || 'User'}</h4>
-                <p className="text-xs text-slate-400 truncate">{user?.role || 'Role'}</p>
-              </div>
-            )}
-          </div>
-
-          <button 
-            onClick={onLogout}
-            className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-            title="Logout"
-          >
-            <LogOut size={18} />
-          </button>
-        </div>
+        <button 
+          onClick={onLogout}
+          className={`
+            w-full flex items-center justify-center gap-3 p-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-medium
+            ${isCollapsed ? '' : 'px-4'}
+          `}
+          title="Logout"
+        >
+          <LogOut size={20} />
+          {!isCollapsed && <span>Logout</span>}
+        </button>
       </div>
 
     </aside>
