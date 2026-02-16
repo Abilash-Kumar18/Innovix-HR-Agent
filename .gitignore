@@ -7,7 +7,7 @@ __pycache__/
 backend/.env
 backend/.venv/
 backend/data/vector_store/  # <-- Added: Prevents pushing your ChromaDB memory
-
+node_modules/
 # =========================
 # FRONTEND (React / Vite)
 # =========================
