@@ -30,20 +30,9 @@ pnpm-debug.log*
 *.sw?
 
 node_modules/
-dist
+dist/
 dist-ssr
 *.local
 
-# OS
-.DS_Store
 
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea
-.DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+
