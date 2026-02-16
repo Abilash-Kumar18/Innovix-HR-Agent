@@ -11,6 +11,7 @@ langgraph
 langchain-core
 langchain-community
 langchain-google-genai
+langchain
 
 # Vector Database (Pinecone)
 pinecone-client
