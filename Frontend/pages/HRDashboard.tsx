@@ -1,196 +1,367 @@
+import React, { useState, useEffect } from 'react';
+import Sidebar from '../components/Sidebar'; 
+import { User, MapPin, Calendar, Shield, BellRing, CheckCircle, Search, Filter, MoreVertical, Plus, FileText, Clock, Upload, Briefcase, X, MessageSquare, ChevronRight } from 'lucide-react';
 
-import React, { useState } from 'react';
-import Sidebar from '../components/Sidebar';
-import { UserRole, Employee, ChatMessage } from '../types';
-import { 
-  Users, 
-  Calendar, 
-  UserPlus, 
-  Search, 
-  Plus, 
-  CheckCircle, 
-  Megaphone,
-  Send,
-  Loader2
-} from 'lucide-react';
-import { getGeminiResponse } from '../services/geminiService';
+// --- SHARED DATA SERVICE (Mock Database) ---
+const getLeaveRequests = () => {
+  const data = localStorage.getItem('leaveRequests');
+  return data ? JSON.parse(data) : [];
+};
 
-const EMPLOYEES: Employee[] = [
-  { id: '1', name: 'John Doe', role: 'Software Engineer', email: 'john@company.com', status: 'Active', department: 'Tech' },
-  { id: '2', name: 'Sarah Smith', role: 'Product Designer', email: 'sarah@company.com', status: 'On Leave', department: 'Design' },
-  { id: '3', name: 'Michael Chen', role: 'Product Manager', email: 'michael@company.com', status: 'Remote', department: 'Product' },
-  { id: '4', name: 'Emma Wilson', role: 'QA Lead', email: 'emma@company.com', status: 'Active', department: 'Tech' },
-  { id: '5', name: 'David Brown', role: 'DevOps Engineer', email: 'david@company.com', status: 'Active', department: 'Tech' },
-];
+const updateRequestStatus = (id: number, status: 'Approved' | 'Rejected') => {
+  const requests = getLeaveRequests();
+  const updated = requests.map((req: any) => 
+    req.id === id ? { ...req, status: status } : req
+  );
+  localStorage.setItem('leaveRequests', JSON.stringify(updated));
+  return updated;
+};
 
-const HRDashboard: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
-  const [query, setQuery] = useState('');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [isTyping, setIsTyping] = useState(false);
+// --- 1. AI CHAT WINDOW (HR Version) ---
+const ChatWindow = ({ onClose }: { onClose: () => void }) => {
+  const [messages, setMessages] = useState([
+    { id: 1, sender: 'ai', text: 'Hello Sarah! I can help you draft new policies or check compliance. What do you need?' }
+  ]);
+  const [inputText, setInputText] = useState('');
 
-  const handleAISearch = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!query.trim()) return;
-
-    const userMsg = query;
-    setQuery('');
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
-    setIsTyping(true);
-
-    const response = await getGeminiResponse(userMsg, 'HR');
-    setMessages(prev => [...prev, { role: 'model', text: response }]);
-    setIsTyping(false);
+  const handleSend = () => {
+    if (!inputText.trim()) return;
+    const newMsg = { id: Date.now(), sender: 'user', text: inputText };
+    setMessages([...messages, newMsg]);
+    setInputText('');
+    
+    setTimeout(() => {
+      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: 'I have noted that down. Would you like me to update the employee handbook?' }]);
+    }, 1000);
   };
 
   return (
-    <div className="flex h-screen overflow-hidden">
-      <Sidebar role={UserRole.HR} onLogout={onLogout} />
-
-      <main className="flex-1 ml-64 p-8 overflow-y-auto bg-[#F8F9FA]">
-        <header className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Workforce Dashboard</h1>
-            <p className="text-gray-500">Welcome back, HR Admin</p>
-          </div>
-          <div className="flex items-center gap-4">
-            <div className="bg-white p-2 rounded-full border border-gray-100 flex items-center gap-3 pr-4">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] flex items-center justify-center text-white font-bold">HR</div>
-              <span className="font-semibold text-gray-700">Admin User</span>
-            </div>
-          </div>
-        </header>
-
-        {/* AI Agent Search Bar */}
-        <section className="mb-8">
-          <form onSubmit={handleAISearch} className="relative group">
-            <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-[#4CAF50]" size={24} />
-            <input
-              type="text"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Ask the AI Agent anything (e.g., 'Who is on leave today?')"
-              className="w-full pl-16 pr-20 py-6 bg-white rounded-[2rem] border border-transparent focus:border-[#4CAF50] shadow-sm focus:shadow-md transition-all text-lg outline-none"
-            />
-            <button 
-              type="submit"
-              className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 rounded-full bg-gradient-to-b from-[#C0E364] to-[#4CAF50] text-white flex items-center justify-center group-hover:scale-105 transition-all"
-            >
-              <Send size={20} />
-            </button>
-          </form>
-
-          {messages.length > 0 && (
-            <div className="mt-4 bg-white rounded-3xl p-6 shadow-sm border border-gray-100 max-h-60 overflow-y-auto">
-              {messages.map((msg, i) => (
-                <div key={i} className={`mb-4 ${msg.role === 'model' ? 'bg-gray-50' : ''} p-4 rounded-2xl`}>
-                  <span className="text-xs font-bold uppercase text-[#4CAF50] block mb-1">
-                    {msg.role === 'model' ? 'Innvoix Agent' : 'You'}
-                  </span>
-                  <p className="text-gray-700">{msg.text}</p>
-                </div>
-              ))}
-              {isTyping && (
-                <div className="flex items-center gap-2 text-gray-400 p-2">
-                  <Loader2 size={16} className="animate-spin" />
-                  <span>Agent is thinking...</span>
-                </div>
-              )}
-            </div>
-          )}
-        </section>
-
-        {/* Stats Grid */}
-        <section className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          {[
-            { label: 'Total Employees', value: '154', icon: <Users />, color: 'text-blue-500' },
-            { label: 'On Leave Today', value: '08', icon: <Calendar />, color: 'text-orange-500' },
-            { label: 'New Hires', value: '12', icon: <UserPlus />, color: 'text-emerald-500' },
-          ].map((stat, i) => (
-            <div key={i} className="bg-white p-8 rounded-[2rem] capsule-shadow flex items-center justify-between">
-              <div>
-                <p className="text-gray-500 font-medium mb-1">{stat.label}</p>
-                <h3 className="text-4xl font-bold text-gray-900">{stat.value}</h3>
-              </div>
-              <div className={`w-14 h-14 rounded-full bg-gray-50 flex items-center justify-center ${stat.color}`}>
-                {React.cloneElement(stat.icon as React.ReactElement, { size: 28 })}
-              </div>
-            </div>
-          ))}
-        </section>
-
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Employee Directory */}
-          <section className="lg:col-span-2 bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-800">Employee Directory</h2>
-              <button className="text-[#4CAF50] font-semibold hover:underline">View All</button>
-            </div>
-            <div className="space-y-4">
-              {EMPLOYEES.map((emp) => (
-                <div key={emp.id} className="flex items-center justify-between p-4 hover:bg-gray-50 rounded-2xl transition-colors">
-                  <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold">
-                      {emp.name.split(' ').map(n => n[0]).join('')}
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-gray-800">{emp.name}</h4>
-                      <p className="text-sm text-gray-500">{emp.role} • {emp.department}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className={`px-4 py-1 rounded-full text-xs font-bold ${
-                      emp.status === 'Active' ? 'bg-green-100 text-green-600' :
-                      emp.status === 'On Leave' ? 'bg-orange-100 text-orange-600' :
-                      'bg-blue-100 text-blue-600'
-                    }`}>
-                      {emp.status}
-                    </span>
-                    <button className="px-4 py-2 rounded-full border border-gray-100 text-sm font-semibold hover:bg-white hover:border-[#4CAF50] transition-all">Details</button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          {/* Quick Actions */}
-          <section className="space-y-6">
-            <div className="bg-white rounded-[2.5rem] p-8 shadow-sm border border-gray-50">
-              <h2 className="text-xl font-bold text-gray-800 mb-6">Quick Actions</h2>
-              <div className="space-y-4">
-                <button className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-50 hover:bg-[#C0E364]/10 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#4CAF50] shadow-sm">
-                    <Plus size={20} />
-                  </div>
-                  <span className="font-bold text-gray-700">Add Employee</span>
-                </button>
-                <button className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-50 hover:bg-[#C0E364]/10 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#4CAF50] shadow-sm">
-                    <CheckCircle size={20} />
-                  </div>
-                  <span className="font-bold text-gray-700">Approve Leave</span>
-                </button>
-                <button className="w-full flex items-center gap-4 p-4 rounded-2xl bg-gray-50 hover:bg-[#C0E364]/10 transition-all group">
-                  <div className="w-10 h-10 rounded-full bg-white flex items-center justify-center text-[#4CAF50] shadow-sm">
-                    <Megaphone size={20} />
-                  </div>
-                  <span className="font-bold text-gray-700">Post Announcement</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Upcoming Birthdays/Events - Bonus Feature */}
-            <div className="bg-gradient-to-br from-[#4CAF50] to-[#C0E364] rounded-[2.5rem] p-8 text-white shadow-lg">
-              <h2 className="text-xl font-bold mb-4">Announcements</h2>
-              <p className="text-white/80 text-sm leading-relaxed mb-6">
-                Monthly town hall is scheduled for Friday at 10:00 AM. Please ensure your department reports are submitted.
-              </p>
-              <button className="w-full py-3 bg-white/20 hover:bg-white/30 rounded-full font-bold transition-all">
-                Learn More
-              </button>
-            </div>
-          </section>
+    <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-fade-in-up">
+      <div className="p-4 bg-slate-900 rounded-t-2xl flex justify-between items-center text-white">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-lime-500 flex items-center justify-center font-bold text-slate-900">AI</div>
+          <div><h4 className="font-bold text-sm">HR Copilot</h4><span className="text-[10px] bg-green-500/20 px-1.5 py-0.5 rounded text-green-400 border border-green-500/30">Online</span></div>
         </div>
+        <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition-colors"><X size={18}/></button>
+      </div>
+      <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50">
+        {messages.map((msg) => (
+          <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'user' ? 'bg-lime-500 text-white rounded-tr-sm' : 'bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-sm'}`}>{msg.text}</div>
+          </div>
+        ))}
+      </div>
+      <div className="p-4 bg-white border-t border-slate-100 rounded-b-2xl">
+        <div className="flex gap-2">
+          <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a command..." className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-lime-500" onKeyPress={(e) => e.key === 'Enter' && handleSend()}/>
+          <button onClick={handleSend} className="w-10 h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center transition-colors"><ChevronRight size={18}/></button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- INTERNAL PAGE COMPONENTS ---
+
+const DashboardOverview = ({ onOpenChat }: { onOpenChat: () => void }) => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-end">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800">Dashboard Overview</h2>
+        <p className="text-slate-500">Welcome back, here is what's happening today.</p>
+      </div>
+      
+      <button 
+        onClick={onOpenChat}
+        className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-slate-200 transition-all flex items-center gap-2"
+      >
+        <MessageSquare size={18} className="text-lime-400"/> Ask AI Copilot
+      </button>
+    </div>
+
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
+        <div className="absolute right-0 top-0 w-24 h-24 bg-lime-100 rounded-bl-full -mr-4 -mt-4 opacity-50 group-hover:scale-110 transition-transform"></div>
+        <h3 className="text-slate-500 font-medium relative z-10">Total Employees</h3>
+        <p className="text-4xl font-bold text-slate-800 mt-2 relative z-10">124</p>
+        <span className="text-xs font-bold text-lime-600 bg-lime-50 px-2 py-1 rounded-full mt-3 inline-block relative z-10">↑ 12% vs last month</span>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+        <h3 className="text-slate-500 font-medium">Open Tickets</h3>
+        <p className="text-4xl font-bold text-slate-800 mt-2">8</p>
+        <div className="w-full bg-slate-100 h-2 rounded-full mt-4 overflow-hidden"><div className="bg-orange-400 h-full w-1/3"></div></div>
+        <p className="text-xs text-slate-400 mt-2">3 High Priority</p>
+      </div>
+
+      <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
+        <h3 className="text-slate-500 font-medium">Pending Approvals</h3>
+        <p className="text-4xl font-bold text-slate-800 mt-2">12</p>
+        <button className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full mt-3 hover:bg-blue-100">Review Now →</button>
+      </div>
+    </div>
+  </div>
+);
+
+const AllEmployees = () => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold text-slate-800">All Employees</h2>
+      <div className="flex gap-2">
+        <div className="relative">
+          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
+          <input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:border-lime-500"/>
+        </div>
+        <button className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-800"><Plus size={16}/> Add Employee</button>
+      </div>
+    </div>
+    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+      <table className="w-full text-left">
+        <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
+          <tr><th className="p-4 font-semibold">Employee</th><th className="p-4 font-semibold">Role</th><th className="p-4 font-semibold">Department</th><th className="p-4 font-semibold">Status</th><th className="p-4 font-semibold text-right">Action</th></tr>
+        </thead>
+        <tbody className="divide-y divide-slate-100">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <tr key={i} className="hover:bg-slate-50 transition-colors">
+              <td className="p-4 flex items-center gap-3">
+                <img src={`https://i.pravatar.cc/150?img=${10+i}`} alt="user" className="w-9 h-9 rounded-full border border-slate-200"/>
+                <div><span className="font-bold text-slate-700 block text-sm">Employee Name {i}</span><span className="text-xs text-slate-400">emp_00{i}</span></div>
+              </td>
+              <td className="p-4 text-sm text-slate-600">Software Engineer</td><td className="p-4 text-sm text-slate-600">Engineering</td><td className="p-4"><span className="bg-lime-100 text-lime-700 text-xs font-bold px-2 py-1 rounded-full">Active</span></td><td className="p-4 text-right"><button className="text-slate-400 hover:text-slate-600"><MoreVertical size={18}/></button></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  </div>
+);
+
+const Recruiting = () => (
+  <div className="space-y-6">
+    <div className="flex justify-between items-center">
+      <h2 className="text-2xl font-bold text-slate-800">Recruiting Pipeline</h2>
+      <button className="bg-lime-500 text-white px-4 py-2 rounded-full font-bold text-sm hover:bg-lime-600 shadow-md shadow-lime-200 flex items-center gap-2">
+        <Plus size={18}/> Add Candidate
+      </button>
+    </div>
+    
+    <div className="grid grid-cols-3 gap-6 h-[600px]">
+      {['Applied', 'Interviewing', 'Hired'].map((stage, idx) => (
+        <div key={stage} className="bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col gap-3">
+          <div className="flex justify-between items-center mb-2 px-1">
+            <h3 className="font-bold text-slate-700">{stage}</h3>
+            <span className="bg-white px-2 py-1 rounded-lg text-xs font-bold text-slate-400 shadow-sm border border-slate-100">3</span>
+          </div>
+          
+          {[1, 2, 3].map(c => (
+             <div key={c} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md cursor-pointer transition-all group">
+               <div className="flex items-center gap-3 mb-3">
+                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lime-100 to-green-200 flex items-center justify-center text-sm font-bold text-lime-700 group-hover:scale-110 transition-transform">CN</div>
+                 <div>
+                   <h4 className="font-bold text-sm text-slate-800">Candidate {c}</h4>
+                   <p className="text-xs text-slate-400">Frontend Dev</p>
+                 </div>
+               </div>
+               <div className="flex gap-2 text-[10px] font-bold uppercase tracking-wide">
+                 <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded-md">Senior</span>
+                 <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded-md">Remote</span>
+               </div>
+             </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  </div>
+);
+
+const Payroll = () => (
+  <div className="space-y-6">
+    <h2 className="text-2xl font-bold text-slate-800">Payroll</h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+       <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 rounded-3xl shadow-xl">
+          <p className="text-slate-400 font-medium mb-1">Total Payroll Cost</p>
+          <h1 className="text-4xl font-bold">$142,500.00</h1>
+          <p className="text-sm text-slate-400 mt-4 mb-8">Scheduled for Oct 31, 2025</p>
+          <button className="w-full bg-lime-500 hover:bg-lime-400 text-slate-900 font-bold py-3 rounded-xl transition-colors">Run Payroll</button>
+       </div>
+    </div>
+  </div>
+);
+
+// --- UPDATED NOTIFICATIONS PAGE (Approval Center) ---
+const NotificationsPage = () => {
+  const [requests, setRequests] = useState<any[]>([]);
+
+  useEffect(() => {
+    // Load requests from "Database" (Local Storage)
+    const allRequests = getLeaveRequests();
+    // HR only sees 'Pending' requests here
+    const pending = allRequests.filter((req: any) => req.status === 'Pending');
+    setRequests(pending);
+  }, []);
+
+  const handleAction = (id: number, status: 'Approved' | 'Rejected') => {
+    updateRequestStatus(id, status);
+    // Remove from UI immediately
+    setRequests(prev => prev.filter(req => req.id !== id));
+    alert(`Request ${status} Successfully! Notification sent to employee.`);
+  };
+
+  return (
+    <div className="max-w-3xl">
+      <h2 className="text-2xl font-bold text-slate-800 mb-6">Notifications & Approvals</h2>
+      <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[300px]">
+        
+        {requests.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400">
+            <CheckCircle size={48} className="mb-4 text-slate-200"/>
+            <p>All caught up! No pending requests.</p>
+          </div>
+        ) : (
+          requests.map((req) => (
+            <div key={req.id} className="flex items-start gap-4 p-6 bg-orange-50/50 border-b border-orange-100 animate-fade-in-up">
+              <div className="p-2.5 bg-orange-100 text-orange-600 rounded-full mt-1">
+                <BellRing size={20} />
+              </div>
+              <div className="flex-1">
+                <div className="flex justify-between items-start">
+                  <h4 className="font-bold text-slate-800 text-sm">New Leave Request</h4>
+                  <span className="text-xs text-slate-400 font-medium">{req.date}</span>
+                </div>
+                <p className="text-sm text-slate-600 mt-1 mb-4 leading-relaxed">
+                  <span className="font-bold text-slate-800">{req.employeeName}</span> ({req.role}) has requested <span className="font-bold text-slate-800">{req.days} days</span> of {req.type} for "{req.reason}".
+                </p>
+                <div className="flex gap-3">
+                  <button 
+                    onClick={() => handleAction(req.id, 'Approved')}
+                    className="bg-slate-900 text-white text-xs px-5 py-2 rounded-full font-bold hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all"
+                  >
+                    Approve Request
+                  </button>
+                  <button 
+                    onClick={() => handleAction(req.id, 'Rejected')}
+                    className="bg-white border border-slate-200 text-slate-600 text-xs px-5 py-2 rounded-full font-bold hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+              <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 animate-pulse"></div>
+            </div>
+          ))
+        )}
+
+      </div>
+    </div>
+  );
+};
+
+const SettingsPage = () => (
+  <div className="max-w-4xl space-y-6">
+    <h2 className="text-2xl font-bold text-slate-800">Global Settings</h2>
+    
+    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+      <div className="flex items-start gap-4">
+        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><FileText size={24}/></div>
+        <div className="flex-1">
+          <h3 className="font-bold text-slate-800 text-lg">Company Policy Documents</h3>
+          <p className="text-slate-500 text-sm mt-1 mb-6">Upload PDF policies here. The AI Assistant uses these to answer employee questions.</p>
+          
+          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer">
+            <Upload size={32} className="mx-auto text-slate-300 mb-2"/>
+            <p className="text-sm font-medium text-slate-600">Click to upload or drag and drop</p>
+            <p className="text-xs text-slate-400 mt-1">PDF, DOCX up to 10MB</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
+      <div className="flex items-start gap-4">
+        <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl"><Clock size={24}/></div>
+        <div className="flex-1">
+          <h3 className="font-bold text-slate-800 text-lg">Work Hours & Attendance</h3>
+          <p className="text-slate-500 text-sm mt-1 mb-6">Configure standard shifts and holiday calendars.</p>
+          
+          <div className="space-y-4">
+             <div className="flex justify-between items-center p-4 border border-slate-100 rounded-xl">
+               <div><p className="font-bold text-slate-700 text-sm">Standard Shift</p><p className="text-xs text-slate-400">09:00 AM - 06:00 PM</p></div>
+               <button className="text-lime-600 font-bold text-sm hover:underline">Edit</button>
+             </div>
+             <div className="flex justify-between items-center p-4 border border-slate-100 rounded-xl">
+               <div><p className="font-bold text-slate-700 text-sm">Holiday Calendar</p><p className="text-xs text-slate-400">India - 2026</p></div>
+               <button className="text-lime-600 font-bold text-sm hover:underline">View</button>
+             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+);
+
+const Profile = () => (
+  <div className="max-w-4xl space-y-8">
+    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden">
+      <div className="absolute top-0 right-0 w-64 h-64 bg-lime-50 rounded-full -mr-20 -mt-20 opacity-50"></div>
+      <img src="https://i.pravatar.cc/150?img=32" className="w-32 h-32 rounded-full border-4 border-white shadow-xl relative z-10" alt="Profile" />
+      <div className="flex-1 text-center md:text-left relative z-10 pt-2">
+        <h1 className="text-3xl font-bold text-slate-800">Sarah Jones</h1>
+        <p className="text-lime-600 font-medium text-lg mb-4">Senior HR Manager</p>
+        <div className="flex flex-wrap justify-center md:justify-start gap-4 text-slate-500 text-sm">
+          <span className="flex items-center gap-1 bg-slate-50 px-3 py-1 rounded-full border border-slate-100"><MapPin size={14}/> New York, USA</span>
+          <span className="flex items-center gap-1 bg-slate-50 px-3 py-1 rounded-full border border-slate-100"><Calendar size={14}/> Joined March 2022</span>
+        </div>
+      </div>
+      <button className="relative z-10 bg-slate-900 text-white px-6 py-2.5 rounded-full font-medium hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all">Edit Profile</button>
+    </div>
+  </div>
+);
+
+// --- MAIN HR DASHBOARD COMPONENT ---
+interface HRDashboardProps {
+  onLogout: () => void;
+}
+
+const HRDashboard: React.FC<HRDashboardProps> = ({ onLogout }) => {
+  const [activePage, setActivePage] = useState('dashboard');
+  const [showChat, setShowChat] = useState(false);
+  const sarahUser = { name: "Sarah Jones", role: "HR Manager", image: "https://i.pravatar.cc/150?img=32" };
+
+  const renderContent = () => {
+    switch(activePage) {
+      case 'dashboard': return <DashboardOverview onOpenChat={() => setShowChat(true)} />;
+      case 'employees': return <AllEmployees />;
+      case 'recruiting': return <Recruiting />;
+      case 'payroll': return <Payroll />;
+      case 'notifications': return <NotificationsPage />; // <--- NEW DYNAMIC PAGE
+      case 'settings': return <SettingsPage />;
+      case 'profile': return <Profile />;
+      default: return <DashboardOverview onOpenChat={() => setShowChat(true)} />;
+    }
+  };
+
+  return (
+    <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900 relative">
+      <Sidebar activePage={activePage} setActivePage={setActivePage} onLogout={onLogout} role="hr" user={sarahUser} />
+      <main className="flex-1 ml-64 p-8 transition-all duration-300">
+        <header className="mb-8 flex justify-between items-center">
+            <h1 className="text-2xl font-bold text-slate-400 capitalize tracking-tight">{activePage === 'dashboard' ? 'Overview' : activePage.replace('-', ' ')}</h1>
+            <div className="flex items-center gap-4">
+               <button onClick={() => setActivePage('notifications')} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-500 hover:text-lime-600 hover:border-lime-200 transition-all relative">
+                 <BellRing size={20} />
+                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+               </button>
+               <div className="h-8 w-px bg-slate-200 mx-2"></div>
+               <div className="text-right hidden md:block">
+                  <p className="text-sm font-bold text-slate-700">{sarahUser.name}</p>
+                  <p className="text-xs text-slate-400">{sarahUser.role}</p>
+               </div>
+               <img src={sarahUser.image} className="w-10 h-10 rounded-full border-2 border-white shadow-sm cursor-pointer" onClick={() => setActivePage('profile')} alt="profile"/>
+            </div>
+        </header>
+        <div className="animate-fade-in-up">{renderContent()}</div>
       </main>
+      {showChat && <ChatWindow onClose={() => setShowChat(false)} />}
     </div>
   );
 };
