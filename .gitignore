@@ -28,8 +28,8 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-
+Frontend/node_modules/
 node_modules/
-dist/
-dist-ssr
-*.local
+Frontend/dist/
+Frontend/dist-ssr
+Frontend/*.local
