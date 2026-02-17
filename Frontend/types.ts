@@ -5,6 +5,8 @@ export enum UserRole {
 }
 
 export interface Employee {
+  employee_id: any;
+  casual_leaves_left: any;
   id: string;
   name: string;
   role: string;

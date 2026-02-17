@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar'; 
 import { User, MapPin, Shield, BellRing, CheckCircle, FileText, Download, Clock, Send, ChevronRight, MessageSquare, Camera, X, Plus, AlertCircle, Bot } from 'lucide-react';
+// Import the API bridge
+import { sendMessageToBackend, api } from '../services/api';
 
-// --- DATA TYPES (For Integration) ---
+// --- DATA TYPES ---
 interface EmployeeData {
   id: string;
   name: string;
@@ -19,53 +21,63 @@ interface EmployeeData {
   };
 }
 
-// --- SHARED DATA SERVICE (Mock Database) ---
-const getLeaveRequests = () => {
-  const data = localStorage.getItem('leaveRequests');
-  return data ? JSON.parse(data) : [];
-};
-
-const sendLeaveRequest = (request: any) => {
-  const requests = getLeaveRequests();
-  const newRequest = { ...request, id: Date.now(), status: 'Pending', date: new Date().toLocaleDateString() };
-  localStorage.setItem('leaveRequests', JSON.stringify([newRequest, ...requests]));
-  return newRequest;
-};
+interface Message {
+  id: number;
+  text: string;
+  sender: 'user' | 'bot';
+}
 
 // --- 1. FULL PAGE AI CHAT COMPONENT ---
 const AIChatPage = () => {
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Payroll questions\n• Company holiday list\n\nHow can I help you today?' }
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, text: "Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Onboarding tasks\n• Company holiday lists\n\nHow can I help you today?", sender: 'bot' }
   ]);
-  const [inputText, setInputText] = useState('');
+  const [inputText, setInputText] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isLoading]);
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (!inputText.trim()) return;
-    const newMsg = { id: Date.now(), sender: 'user', text: inputText };
-    setMessages(prev => [...prev, newMsg]);
-    setInputText('');
-    
-    setTimeout(() => {
-      let reply = "I'm still learning, but I can help connect you with HR!";
-      const lowerInput = inputText.toLowerCase();
-      
-      if (lowerInput.includes('leave') || lowerInput.includes('balance')) {
-        reply = "You currently have:\n• 4 Casual Leaves\n• 8 Sick Leaves\n• 15 Privilege Leaves\n\nWould you like to apply for one?";
-      } else if (lowerInput.includes('payroll') || lowerInput.includes('salary')) {
-        reply = "Your latest payslip has been generated. The net amount is $4,250.00.";
-      }
 
-      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: reply }]);
-    }, 1000);
+    // 1. Add User Message
+    const userMessage: Message = { 
+      id: Date.now(), 
+      text: inputText, 
+      sender: 'user' 
+    };
+    
+    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = inputText;
+    setInputText(''); 
+    setIsLoading(true);
+
+    try {
+      // 2. Call Python Backend
+      // We use "emp_001" (Abilash) as the logged-in user for this demo
+      const botResponseText = await sendMessageToBackend(currentInput, "emp_001");
+
+      // 3. Add Bot Response
+      const botMessage: Message = { 
+        id: Date.now() + 1, 
+        text: botResponseText, 
+        sender: 'bot' 
+      };
+      setMessages((prev) => [...prev, botMessage]);
+    } catch (error) {
+      console.error("Failed to send message", error);
+      setMessages(prev => [...prev, { id: Date.now(), text: "⚠️ Error connecting to the HR Agent. Is the backend running?", sender: 'bot' }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in-up">
+      {/* Chat Header */}
       <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-white">
         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center text-white shadow-md shadow-lime-200">
           <Bot size={24} />
@@ -79,27 +91,42 @@ const AIChatPage = () => {
         </div>
       </div>
 
+      {/* Messages Area */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex gap-3 max-w-[80%] ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
               <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.sender === 'user' ? 'bg-slate-200 hidden' : 'bg-lime-100 text-lime-600'}`}>
-                {msg.sender === 'ai' && <Bot size={16}/>}
+                {msg.sender === 'bot' && <Bot size={16}/>}
               </div>
               <div className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-line shadow-sm
                 ${msg.sender === 'user' 
                   ? 'bg-slate-900 text-white rounded-tr-sm' 
                   : 'bg-white text-slate-700 border border-slate-100 rounded-tl-sm'
-                }`}
-              >
+                }`}>
                 {msg.text}
               </div>
             </div>
           </div>
         ))}
+        {isLoading && (
+          <div className="flex justify-start">
+             <div className="flex gap-3 max-w-[80%] flex-row">
+                <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-lime-100 text-lime-600">
+                   <Bot size={16}/>
+                </div>
+                <div className="bg-white text-slate-500 p-4 rounded-2xl rounded-tl-sm border border-slate-100 shadow-sm flex items-center gap-2">
+                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+                   <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+                </div>
+             </div>
+          </div>
+        )}
         <div ref={chatEndRef} />
       </div>
 
+      {/* Input Area */}
       <div className="p-6 bg-white border-t border-slate-100">
         <div className="flex gap-4 items-center bg-slate-50 p-2 rounded-full border border-slate-200 focus-within:border-lime-500 focus-within:ring-2 focus-within:ring-lime-100 transition-all">
           <input 
@@ -109,10 +136,11 @@ const AIChatPage = () => {
             placeholder="Type your question about HR policies..." 
             className="flex-1 bg-transparent px-4 py-2 text-slate-700 focus:outline-none placeholder:text-slate-400"
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            disabled={isLoading}
           />
           <button 
             onClick={handleSend}
-            disabled={!inputText.trim()}
+            disabled={!inputText.trim() || isLoading}
             className="w-10 h-10 bg-lime-500 hover:bg-lime-600 disabled:bg-slate-300 text-white rounded-full flex items-center justify-center transition-all shadow-md"
           >
             <Send size={18} className={inputText.trim() ? "ml-0.5" : ""} />
@@ -123,7 +151,7 @@ const AIChatPage = () => {
   );
 };
 
-// --- 2. MODAL COMPONENTS (For Settings) ---
+// --- 2. MODAL COMPONENT ---
 const EditModal = ({ title, onClose, children }: { title: string, onClose: () => void, children: React.ReactNode }) => (
   <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
@@ -138,29 +166,29 @@ const EditModal = ({ title, onClose, children }: { title: string, onClose: () =>
   </div>
 );
 
-// --- INTERNAL PAGE COMPONENTS ---
+// --- 3. INTERNAL PAGE COMPONENTS ---
 
-// 1. UPDATED DASHBOARD OVERVIEW (Real Data + No Chat Widget + No View Profile Button)
 const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeData | null }) => {
-  if (!employeeData) return <div className="p-10 text-slate-400">Loading Dashboard...</div>;
+  if (!employeeData) return <div className="p-10 text-slate-400">Loading Dashboard Data from MongoDB...</div>;
 
   return (
     <div className="space-y-8">
-      {/* Welcome Card - Full Width, No Button */}
+      {/* Welcome Card */}
       <div className="bg-gradient-to-r from-lime-400 to-green-500 rounded-3xl p-8 text-white shadow-lg shadow-lime-100 relative overflow-hidden">
         <div className="relative z-10">
           <h2 className="text-3xl font-bold mb-2">Welcome Back, {employeeData.name.split(' ')[0]}! 👋</h2>
           <p className="opacity-90 max-w-lg text-lg">
-            You have 2 pending tasks and your next leave starts in 4 days.
+            You have {employeeData.leaves.casual} casual leaves remaining.
           </p>
         </div>
         <div className="absolute -right-10 -bottom-20 w-64 h-64 bg-white opacity-10 rounded-full blur-2xl"></div>
       </div>
 
-      {/* Leave Balance Stats - Expanded Grid */}
+      {/* Leave Balance Stats - REAL DATA */}
       <div>
-        <h3 className="text-lg font-bold text-slate-800 mb-4">Leave Balance</h3>
+        <h3 className="text-lg font-bold text-slate-800 mb-4">Leave Balance (Live)</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Casual */}
           <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center group hover:shadow-md transition-all">
             <div className="w-20 h-20 mx-auto bg-gradient-to-b from-lime-300 to-lime-500 rounded-full mb-4 shadow-inner group-hover:scale-105 transition-transform flex items-center justify-center text-white font-bold text-2xl pt-1">
               {employeeData.leaves.casual}
@@ -169,6 +197,7 @@ const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeDat
             <p className="text-sm text-slate-400">Days Left</p>
           </div>
 
+          {/* Sick */}
           <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center group hover:shadow-md transition-all">
             <div className="w-20 h-20 mx-auto bg-gradient-to-b from-orange-300 to-orange-500 rounded-full mb-4 shadow-inner group-hover:scale-105 transition-transform flex items-center justify-center text-white font-bold text-2xl pt-1">
               {employeeData.leaves.sick}
@@ -177,6 +206,7 @@ const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeDat
             <p className="text-sm text-slate-400">Days Left</p>
           </div>
 
+          {/* Privilege */}
           <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center group hover:shadow-md transition-all">
             <div className="w-20 h-20 mx-auto bg-gradient-to-b from-blue-300 to-blue-500 rounded-full mb-4 shadow-inner group-hover:scale-105 transition-transform flex items-center justify-center text-white font-bold text-2xl pt-1">
               {employeeData.leaves.privilege}
@@ -186,56 +216,47 @@ const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeDat
           </div>
         </div>
       </div>
-
-      {/* Recent Activity Section */}
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">Recent Activity</h3>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-            <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><FileText size={20}/></div>
-            <div><h4 className="font-bold text-slate-700">Payslip Generated</h4><p className="text-xs text-slate-400">Oct 2025</p></div>
-          </div>
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl">
-            <div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center"><CheckCircle size={20}/></div>
-            <div><h4 className="font-bold text-slate-700">Leave Approved</h4><p className="text-xs text-slate-400">Sick Leave (1 Day)</p></div>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
 
-// 2. NOTIFICATIONS PAGE (PRESERVED LOGIC)
+// NOTIFICATIONS PAGE (Updated to Fetch from Backend)
 const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null }) => {
   const [activeTab, setActiveTab] = useState('new');
   const [leaveType, setLeaveType] = useState('Casual Leave');
   const [days, setDays] = useState('');
   const [reason, setReason] = useState('');
   const [myRequests, setMyRequests] = useState<any[]>([]);
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false);
 
+  // --- FETCH REAL HISTORY FROM BACKEND ---
   useEffect(() => {
-    const allRequests = getLeaveRequests();
-    // Filter only my requests (Using real name if available, else fallback)
-    const empName = employeeData?.name || 'Alex Johnson';
-    setMyRequests(allRequests.filter((req: any) => req.employeeName === empName));
-  }, [activeTab, employeeData]);
+    if (activeTab === 'history') {
+      const fetchHistory = async () => {
+        setIsLoadingHistory(true);
+        try {
+          // Fetch all leaves
+          const response = await api.get('/api/leaves');
+          const allLeaves = response.data.data;
+          
+          // Filter for the current user (emp_001)
+          // Note: In a real app, the backend should filter this securely
+          const myLeaves = allLeaves.filter((req: any) => req.emp_id === "emp_001");
+          setMyRequests(myLeaves);
+        } catch (error) {
+          console.error("Failed to fetch leave history", error);
+        } finally {
+          setIsLoadingHistory(false);
+        }
+      };
+      fetchHistory();
+    }
+  }, [activeTab]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!days || !reason) return;
-
-    sendLeaveRequest({
-      employeeName: employeeData?.name || 'Alex Johnson',
-      role: employeeData?.role || 'Employee',
-      type: leaveType,
-      days: days,
-      reason: reason
-    });
-
-    alert("Request Sent to HR!");
-    setDays('');
-    setReason('');
-    setActiveTab('history');
+    alert("Please use the AI Assistant Chat to apply for leave! It handles the approval logic automatically.");
+    setActiveTab('new');
   };
 
   return (
@@ -251,7 +272,7 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
       {activeTab === 'new' && (
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100 animate-fade-in-up">
           <h3 className="font-bold text-slate-800 text-lg mb-1">Request Time Off</h3>
-          <p className="text-slate-500 text-sm mb-6">Send a notification to HR for approval.</p>
+          <p className="text-slate-500 text-sm mb-6">Use the AI Chat for faster processing.</p>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <div className="grid grid-cols-2 gap-5">
@@ -260,7 +281,6 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
                 <select value={leaveType} onChange={(e) => setLeaveType(e.target.value)} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-lime-500 transition-colors">
                   <option>Casual Leave</option>
                   <option>Sick Leave</option>
-                  <option>Privilege Leave</option>
                 </select>
               </div>
               <div>
@@ -273,7 +293,7 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
               <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-lime-500 transition-colors" placeholder="Briefly explain why..."></textarea>
             </div>
             <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
-              <Send size={18} /> Send Request to HR
+              <Send size={18} /> Send Request (Use Chat Recommended)
             </button>
           </form>
         </div>
@@ -281,23 +301,25 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
 
       {activeTab === 'history' && (
         <div className="space-y-4 animate-fade-in-up">
-          {myRequests.length === 0 ? (
-             <div className="text-center py-10 text-slate-400">No requests found.</div>
+          {isLoadingHistory ? (
+            <div className="text-center py-10 text-slate-400">Loading your history from MongoDB...</div>
+          ) : myRequests.length === 0 ? (
+             <div className="text-center py-10 text-slate-400">No requests found in database.</div>
           ) : (
-            myRequests.map((req) => (
-              <div key={req.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
+            myRequests.map((req, idx) => (
+              <div key={idx} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
                 <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 
-                  ${req.status === 'Approved' ? 'bg-green-100 text-green-600' : req.status === 'Rejected' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
-                  {req.status === 'Approved' ? <CheckCircle size={20}/> : req.status === 'Rejected' ? <AlertCircle size={20}/> : <Clock size={20}/>}
+                  ${req.status === 'Approved' ? 'bg-green-100 text-green-600' : req.status.includes('Rejected') ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+                  {req.status === 'Approved' ? <CheckCircle size={20}/> : <Clock size={20}/>}
                 </div>
                 <div className="flex-1">
                   <div className="flex justify-between">
-                    <h4 className="font-bold text-slate-800">{req.type} ({req.days} days)</h4>
-                    <span className="text-xs text-slate-400">{req.date}</span>
+                    <h4 className="font-bold text-slate-800 capitalize">{req.type} Leave ({req.days} days)</h4>
+                    <span className="text-xs text-slate-400">ID: {req._id?.substring(0, 8)}...</span>
                   </div>
-                  <p className="text-sm text-slate-500 mt-1">Reason: {req.reason}</p>
+                  <p className="text-sm text-slate-500 mt-1">Status Update from HR</p>
                   <p className={`text-xs font-bold mt-2 
-                    ${req.status === 'Approved' ? 'text-green-600' : req.status === 'Rejected' ? 'text-red-600' : 'text-orange-500'}`}>
+                    ${req.status === 'Approved' ? 'text-green-600' : 'text-orange-500'}`}>
                     Status: {req.status}
                   </p>
                 </div>
@@ -310,9 +332,9 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   );
 };
 
-// 3. UPDATED PROFILE (Using Real Data)
+// UPDATED PROFILE
 const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, onImageChange: any }) => {
-  if (!data) return <div>Loading...</div>;
+  if (!data) return <div>Loading Profile...</div>;
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeModal, setActiveModal] = useState<'none' | 'password' | 'notifications'>('none');
 
@@ -337,7 +359,6 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
           <p className="text-lime-600 font-medium text-lg mb-4">{data.role}</p>
           <div className="flex flex-wrap justify-center md:justify-start gap-4 text-slate-500 text-sm">
             <span className="flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-slate-100 shadow-sm"><MapPin size={14}/> {data.location}</span>
-            <span className="flex items-center gap-1 bg-white px-3 py-1 rounded-full border border-slate-100 shadow-sm"><Clock size={14}/> Full-Time</span>
           </div>
         </div>
       </div>
@@ -372,8 +393,8 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
       {activeModal === 'password' && (
         <EditModal title="Update Password" onClose={() => setActiveModal('none')}>
           <div className="space-y-4">
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div>
-            <div><label className="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div>
+            <div><label className="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div>
             <button onClick={handleSave} className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-slate-800">Update Password</button>
           </div>
         </EditModal>
@@ -395,11 +416,11 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
   );
 };
 
-// Placeholder Pages (Minimal for brevity)
-const MyTeam = () => (<div className="p-10 text-center text-slate-400">Team Directory Placeholder (For Dharani to Integrate)</div>);
-const EmployeePayslips = () => (<div className="p-10 text-center text-slate-400">Payslips Placeholder (For Dharani to Integrate)</div>);
+// Placeholder Pages
+const MyTeam = () => (<div className="p-10 text-center text-slate-400">Team Directory Placeholder</div>);
+const EmployeePayslips = () => (<div className="p-10 text-center text-slate-400">Payslips Placeholder</div>);
 
-// 4. MAIN DASHBOARD COMPONENT (Integration Hub)
+// --- 4. MAIN DASHBOARD COMPONENT ---
 interface EmployeeDashboardProps { onLogout: () => void; }
 
 const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
@@ -407,31 +428,36 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
 
-  // --- DHARANI: INTEGRATE API HERE ---
+  // --- UPDATED: FETCH REAL DATA FROM BACKEND ---
   useEffect(() => {
     const fetchEmployeeData = async () => {
       try {
-        // Uncomment this when API is ready:
-        // const response = await fetch('/api/employee/me');
-        // const data = await response.json();
-        // setEmployeeData(data);
+        // 1. Get all employees from your Backend
+        const response = await api.get('/api/employees');
+        const allEmployees = response.data.data;
 
-        // --- MOCK DATA (Remove this after integration) ---
-        setTimeout(() => {
+        // 2. Find "emp_001" (Abilash) for the demo
+        const myProfile = allEmployees.find((e: any) => e.employee_id === "emp_001");
+
+        if (myProfile) {
           setEmployeeData({
-            id: "EMP-2025-042",
-            name: "Alex Johnson",
-            role: "Senior Frontend Developer",
-            department: "Engineering",
-            email: "alex.johnson@innvoix.com",
-            phone: "+1 (555) 987-6543",
-            location: "San Francisco, CA",
+            id: myProfile.employee_id,
+            name: myProfile.name,
+            role: myProfile.role,
+            department: myProfile.department || "Engineering",
+            email: `${myProfile.name.split(' ')[0].toLowerCase()}@innvoix.com`,
+            phone: "+91 98765 43210",
+            location: "Bangalore, India",
             image: "https://i.pravatar.cc/150?img=12",
-            leaves: { casual: 4, sick: 8, privilege: 15 }
+            leaves: {
+              casual: myProfile.casual_leaves_left || 0,
+              sick: myProfile.sick_leaves_left || 0,
+              privilege: 15
+            }
           });
-        }, 500); 
+        }
       } catch (error) {
-        console.error("Failed to fetch employee data", error);
+        console.error("❌ Failed to connect to Backend:", error);
       }
     };
 
@@ -439,7 +465,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Dharani: Add API call to upload image here
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const imageUrl = URL.createObjectURL(file);
@@ -453,7 +478,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
       case 'chat': return <AIChatPage />; 
       case 'employees': return <MyTeam />;
       case 'payroll': return <EmployeePayslips />;
-      case 'notifications': return <NotificationsPage employeeData={employeeData} />; // <--- PRESERVED LOGIC
+      case 'notifications': return <NotificationsPage employeeData={employeeData} />;
       case 'profile': return <EmployeeProfile data={employeeData} onImageChange={handleImageChange} />;
       default: return <EmployeeDashboardOverview employeeData={employeeData} />;
     }
@@ -461,8 +486,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900 relative">
-      
-      {/* Sidebar with Toggle Props */}
       <Sidebar 
         activePage={activePage} 
         setActivePage={setActivePage} 
@@ -473,10 +496,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
         toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       
-      {/* Main Content - Adjust margin based on sidebar state */}
       <main className={`flex-1 p-8 transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
-        
-        {/* Header */}
         <header className="mb-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-400 capitalize tracking-tight">
             {activePage === 'dashboard' ? 'Overview' : activePage.replace('-', ' ')}
@@ -491,7 +511,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
              </button>
              <div className="h-8 w-px bg-slate-200 mx-2"></div>
              
-             {/* User Info (Real Data) */}
              <div className="text-right hidden md:block">
                 <p className="text-sm font-bold text-slate-700">{employeeData?.name || 'Loading...'}</p>
                 <p className="text-xs text-slate-400">{employeeData?.role || '...'}</p>
