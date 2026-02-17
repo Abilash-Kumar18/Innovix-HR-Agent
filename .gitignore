@@ -6,25 +6,8 @@ __pycache__/
 *.pyo
 backend/.env
 backend/.venv/
-backend/data/vector_store/  # <-- Added: Prevents pushing your ChromaDB memory
-node_modules/
-# =========================
-# FRONTEND (React / Vite)
-# =========================
-Frontend/node_modules/
-dist/
-dist-ssr/
-*.local
-frontend/.env* # <-- Added: Secures Vite environment variables
-
-# =========================
-# LOGS
-# =========================
-logs/
 backend/.venv1/
-# Logs
-logs
-backend/.venv1/
+Frontend/.env
 # Logs
 logs
 *.log
@@ -45,3 +28,8 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+
+node_modules/
+dist/
+dist-ssr
+*.local
