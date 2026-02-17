@@ -8,7 +8,7 @@ import asyncio
 from app.tools.search_tools import search_policy
 
 # --- UPDATED IMPORTS ---
-from app.tools.hr_tools import db,draft_policy_update, get_employee_details, apply_for_leave, get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, raise_hr_ticket, list_employees
+from app.tools.hr_tools import db,draft_policy_update, get_employee_details, apply_for_leave, get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, raise_hr_ticket, list_employees, offboard_employee
 
 load_dotenv()
 
@@ -35,7 +35,7 @@ def get_agent_executor():
     tools = [
         Tool(name="Search_HR_Policy", func=search_policy, description="For PDF policy lookups."),
         get_employee_details, apply_for_leave, get_upcoming_holidays, 
-        raise_hr_ticket, onboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees
+        raise_hr_ticket, onboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees, offboard_employee
     ]
     
     return create_agent(llm, tools)
@@ -44,10 +44,10 @@ def clean_response(response_content):
     if isinstance(response_content, list):
         return "".join([block.get("text", "") for block in response_content if "text" in block])
     return str(response_content)
-
+chat_memory = []
 async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     # 1. THE FIX: This must be the very first line inside the function!
-    global current_key_idx
+    global current_key_idx, chat_message
     
     # 2. THEN do your Identity & Access Lookup
     user_record = await db.employees.find_one({"employee_id": employee_id.lower()})
@@ -65,18 +65,33 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         is_hr_admin = False
 
     # --- 2. THE DYNAMIC SECURITY PROMPT ---
+    # --- 2. THE DYNAMIC SECURITY PROMPT ---
     system_instruction = (
-        f"You are the Innvoix HR Agentic AI. "
+        f"You are the Innovix HR Agentic AI. "
         f"You are currently chatting with {user_name} (ID: {employee_id}). "
         f"Their official role/department is: {role_title}. "
         "\n\n--- SECURITY & ACCESS CONTROL RULES ---\n"
         "1. Standard Employees can ONLY ask about policies, check their own leave balance, apply for leave, and raise tickets.\n"
-        "2. ONLY HR Administrators have the security clearance to use these tools: 'onboard_employee', "
+        "2. ONLY HR Administrators have the security clearance to use these tools: 'onboard_employee', 'offboard_employee', "
         "'prepare_sensitive_transaction', 'draft_policy_update', 'add_company_holiday', and 'list_employees'.\n"
         "3. If a Standard Employee asks you to perform an HR-only action, you MUST completely refuse, "
-        "address them by name, and tell them they do not have the required security clearance."
+        "address them by name, and tell them they do not have the required security clearance.\n"
+        "\n--- WORKFLOW ORCHESTRATION RULES ---\n"
+        "4. ONBOARDING: If an HR Admin asks to onboard someone, you MUST NOT call the tool immediately. "
+        "You must first converse with them to collect the new hire's Bank Account Number and Emergency Contact Number. "
+        "Only call the onboard tool once you have all the data.\n"
+        "5. OFFBOARDING: When offboarding, ensure you ask for the specific offboard date if it wasn't provided.\n"
+        "\n--- DATA PRIVACY & MASKING RULES ---\n"
+        "6. If you retrieve an employee's personal details (like Bank Account, SSN, or Emergency Contact) from the database, "
+        "you MUST dynamically mask the data in your final response to the user. "
+        "For example, if the bank account is 123456789, output it as *****6789. Never display the full sensitive number."
     )
+    # --- MEMORY MANAGEMENT ---
+    # 1. Add the user's new message to the memory
+    chat_memory.append(("user", user_message))
     
+    # 2. Combine the System Prompt with the ENTIRE conversation history
+    messages = [SystemMessage(content=system_instruction)] + chat_memory
     messages = [SystemMessage(content=system_instruction), ("user", user_message)]
 
     # --- 3. THE FALLBACK LOOP (Keep your existing execution loop) ---
@@ -85,6 +100,7 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
             agent_executor = get_agent_executor()
             response = await agent_executor.ainvoke({"messages": messages})
             raw_content = response["messages"][-1].content
+            chat_memory.append(("assistant", raw_content))
             return clean_response(raw_content)
         except Exception as e:
             error_msg = str(e).lower()
