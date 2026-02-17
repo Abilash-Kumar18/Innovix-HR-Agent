@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar'; 
 import { User, MapPin, Shield, BellRing, CheckCircle, FileText, Download, Clock, Send, ChevronRight, MessageSquare, Camera, X, Plus, AlertCircle, Bot } from 'lucide-react';
 
-// --- DATA TYPES (For Integration) ---
+// --- DATA TYPES ---
 interface EmployeeData {
   id: string;
   name: string;
@@ -19,7 +19,7 @@ interface EmployeeData {
   };
 }
 
-// --- SHARED DATA SERVICE (Mock Database) ---
+// --- SHARED DATA SERVICE ---
 const getLeaveRequests = () => {
   const data = localStorage.getItem('leaveRequests');
   return data ? JSON.parse(data) : [];
@@ -104,8 +104,8 @@ const AIChatPage = () => {
         <div className="flex gap-4 items-center bg-slate-50 p-2 rounded-full border border-slate-200 focus-within:border-lime-500 focus-within:ring-2 focus-within:ring-lime-100 transition-all">
           <input 
             type="text" 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
+            value={inputText} 
+            onChange={(e) => setInputText(e.target.value)} 
             placeholder="Type your question about HR policies..." 
             className="flex-1 bg-transparent px-4 py-2 text-slate-700 focus:outline-none placeholder:text-slate-400"
             onKeyPress={(e) => e.key === 'Enter' && handleSend()}
@@ -123,7 +123,7 @@ const AIChatPage = () => {
   );
 };
 
-// --- 2. MODAL COMPONENTS (For Settings) ---
+// --- 2. MODAL COMPONENTS ---
 const EditModal = ({ title, onClose, children }: { title: string, onClose: () => void, children: React.ReactNode }) => (
   <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
     <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-scale-in">
@@ -140,13 +140,29 @@ const EditModal = ({ title, onClose, children }: { title: string, onClose: () =>
 
 // --- INTERNAL PAGE COMPONENTS ---
 
-// 1. UPDATED DASHBOARD OVERVIEW (Real Data + No Chat Widget + No View Profile Button)
-const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeData | null }) => {
+// 1. UPDATED DASHBOARD OVERVIEW 
+const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeData: EmployeeData | null, setActivePage: (page: string) => void }) => {
   if (!employeeData) return <div className="p-10 text-slate-400">Loading Dashboard...</div>;
 
   return (
-    <div className="space-y-8">
-      {/* Welcome Card - Full Width, No Button */}
+    <div className="space-y-6">
+      
+      {/* Header Row: Title & Black Ask AI Copilot Button */}
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Dashboard</h2>
+          <p className="text-slate-500">Welcome back, here is what's happening today.</p>
+        </div>
+        
+        <button 
+          onClick={() => setActivePage('chat')}
+          className="bg-slate-900 hover:bg-slate-800 text-white px-5 py-2.5 rounded-full text-sm font-bold shadow-lg shadow-slate-200 transition-all flex items-center gap-2"
+        >
+          <MessageSquare size={18} className="text-lime-400"/> Ask AI Copilot
+        </button>
+      </div>
+
+      {/* Welcome Card (No View Profile Button) */}
       <div className="bg-gradient-to-r from-lime-400 to-green-500 rounded-3xl p-8 text-white shadow-lg shadow-lime-100 relative overflow-hidden">
         <div className="relative z-10">
           <h2 className="text-3xl font-bold mb-2">Welcome Back, {employeeData.name.split(' ')[0]}! 👋</h2>
@@ -157,7 +173,7 @@ const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeDat
         <div className="absolute -right-10 -bottom-20 w-64 h-64 bg-white opacity-10 rounded-full blur-2xl"></div>
       </div>
 
-      {/* Leave Balance Stats - Expanded Grid */}
+      {/* Leave Balance Stats */}
       <div>
         <h3 className="text-lg font-bold text-slate-800 mb-4">Leave Balance</h3>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -205,7 +221,7 @@ const EmployeeDashboardOverview = ({ employeeData }: { employeeData: EmployeeDat
   );
 };
 
-// 2. NOTIFICATIONS PAGE (PRESERVED LOGIC)
+// 2. UPDATED NOTIFICATIONS PAGE (Full Width + Green Button)
 const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null }) => {
   const [activeTab, setActiveTab] = useState('new');
   const [leaveType, setLeaveType] = useState('Casual Leave');
@@ -215,7 +231,6 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
 
   useEffect(() => {
     const allRequests = getLeaveRequests();
-    // Filter only my requests (Using real name if available, else fallback)
     const empName = employeeData?.name || 'Alex Johnson';
     setMyRequests(allRequests.filter((req: any) => req.employeeName === empName));
   }, [activeTab, employeeData]);
@@ -239,7 +254,7 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   };
 
   return (
-    <div className="max-w-3xl space-y-6">
+    <div className="w-full space-y-6"> {/* Full Width */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-slate-800">Leave & Notifications</h2>
         <div className="flex bg-white rounded-lg p-1 border border-slate-200">
@@ -272,7 +287,9 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
               <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Reason</label>
               <textarea value={reason} onChange={(e) => setReason(e.target.value)} rows={3} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-lime-500 transition-colors" placeholder="Briefly explain why..."></textarea>
             </div>
-            <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-slate-800 transition-all flex items-center justify-center gap-2">
+            
+            {/* GREEN SEND BUTTON */}
+            <button type="submit" className="w-full bg-lime-500 hover:bg-lime-600 text-slate-900 py-3 rounded-xl font-bold transition-all flex items-center justify-center gap-2 shadow-md shadow-lime-100">
               <Send size={18} /> Send Request to HR
             </button>
           </form>
@@ -310,7 +327,7 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   );
 };
 
-// 3. UPDATED PROFILE (Using Real Data)
+// 3. UPDATED PROFILE
 const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, onImageChange: any }) => {
   if (!data) return <div>Loading...</div>;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -342,7 +359,6 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
         </div>
       </div>
       
-      {/* Details Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
           <h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg"><User size={20} className="text-lime-600"/> Personal Details</h3>
@@ -368,7 +384,6 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
         </div>
       </div>
 
-      {/* Modals */}
       {activeModal === 'password' && (
         <EditModal title="Update Password" onClose={() => setActiveModal('none')}>
           <div className="space-y-4">
@@ -395,11 +410,11 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
   );
 };
 
-// Placeholder Pages (Minimal for brevity)
-const MyTeam = () => (<div className="p-10 text-center text-slate-400">Team Directory Placeholder (For Dharani to Integrate)</div>);
-const EmployeePayslips = () => (<div className="p-10 text-center text-slate-400">Payslips Placeholder (For Dharani to Integrate)</div>);
+// Placeholder Pages
+const MyTeam = () => (<div className="p-10 text-center text-slate-400">Team Directory Placeholder</div>);
+const EmployeePayslips = () => (<div className="p-10 text-center text-slate-400">Payslips Placeholder</div>);
 
-// 4. MAIN DASHBOARD COMPONENT (Integration Hub)
+// 4. MAIN DASHBOARD COMPONENT
 interface EmployeeDashboardProps { onLogout: () => void; }
 
 const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
@@ -407,39 +422,24 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
 
-  // --- DHARANI: INTEGRATE API HERE ---
   useEffect(() => {
-    const fetchEmployeeData = async () => {
-      try {
-        // Uncomment this when API is ready:
-        // const response = await fetch('/api/employee/me');
-        // const data = await response.json();
-        // setEmployeeData(data);
-
-        // --- MOCK DATA (Remove this after integration) ---
-        setTimeout(() => {
-          setEmployeeData({
-            id: "EMP-2025-042",
-            name: "Alex Johnson",
-            role: "Senior Frontend Developer",
-            department: "Engineering",
-            email: "alex.johnson@innvoix.com",
-            phone: "+1 (555) 987-6543",
-            location: "San Francisco, CA",
-            image: "https://i.pravatar.cc/150?img=12",
-            leaves: { casual: 4, sick: 8, privilege: 15 }
-          });
-        }, 500); 
-      } catch (error) {
-        console.error("Failed to fetch employee data", error);
-      }
-    };
-
-    fetchEmployeeData();
+    // Simulating Real API Call
+    setTimeout(() => {
+      setEmployeeData({
+        id: "EMP-2025-042",
+        name: "Alex Johnson",
+        role: "Senior Frontend Developer",
+        department: "Engineering",
+        email: "alex.johnson@innvoix.com",
+        phone: "+1 (555) 987-6543",
+        location: "San Francisco, CA",
+        image: "https://i.pravatar.cc/150?img=12",
+        leaves: { casual: 4, sick: 8, privilege: 15 }
+      });
+    }, 500);
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Dharani: Add API call to upload image here
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       const imageUrl = URL.createObjectURL(file);
@@ -449,20 +449,20 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
 
   const renderContent = () => {
     switch(activePage) {
-      case 'dashboard': return <EmployeeDashboardOverview employeeData={employeeData} />;
+      case 'dashboard': return <EmployeeDashboardOverview employeeData={employeeData} setActivePage={setActivePage} />;
       case 'chat': return <AIChatPage />; 
       case 'employees': return <MyTeam />;
       case 'payroll': return <EmployeePayslips />;
-      case 'notifications': return <NotificationsPage employeeData={employeeData} />; // <--- PRESERVED LOGIC
+      case 'notifications': return <NotificationsPage employeeData={employeeData} />; 
       case 'profile': return <EmployeeProfile data={employeeData} onImageChange={handleImageChange} />;
-      default: return <EmployeeDashboardOverview employeeData={employeeData} />;
+      default: return <EmployeeDashboardOverview employeeData={employeeData} setActivePage={setActivePage} />;
     }
   };
 
   return (
     <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900 relative">
       
-      {/* Sidebar with Toggle Props */}
+      {/* Sidebar */}
       <Sidebar 
         activePage={activePage} 
         setActivePage={setActivePage} 
@@ -473,25 +473,22 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
         toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       
-      {/* Main Content - Adjust margin based on sidebar state */}
+      {/* Main Content */}
       <main className={`flex-1 p-8 transition-all duration-300 ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         
-        {/* Header */}
+        {/* Header - No Chat Icon */}
         <header className="mb-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold text-slate-400 capitalize tracking-tight">
             {activePage === 'dashboard' ? 'Overview' : activePage.replace('-', ' ')}
           </h1>
           
           <div className="flex items-center gap-4">
-             <button onClick={() => setActivePage('chat')} className="w-10 h-10 rounded-full flex items-center justify-center shadow-sm border bg-white border-slate-200 text-slate-500 hover:text-lime-600 transition-all">
-               <MessageSquare size={18} />
-             </button>
+             {/* Only Notification & User Profile Here */}
              <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-500 hover:text-lime-600 transition-all relative" onClick={() => setActivePage('notifications')}>
                <BellRing size={20} />
              </button>
              <div className="h-8 w-px bg-slate-200 mx-2"></div>
              
-             {/* User Info (Real Data) */}
              <div className="text-right hidden md:block">
                 <p className="text-sm font-bold text-slate-700">{employeeData?.name || 'Loading...'}</p>
                 <p className="text-xs text-slate-400">{employeeData?.role || '...'}</p>
