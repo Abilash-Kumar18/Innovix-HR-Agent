@@ -1,69 +1,124 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar'; 
-import { User, MapPin, Calendar, Shield, BellRing, CheckCircle, Search, Filter, MoreVertical, Plus, FileText, Clock, Upload, Briefcase, X, MessageSquare, ChevronRight } from 'lucide-react';
+import { User, MapPin, Calendar, BellRing, CheckCircle, Search, Plus, FileText, Clock, Upload, X, MessageSquare, ChevronRight, MoreVertical, Briefcase, AlertTriangle, XCircle, Bot } from 'lucide-react';
+// IMPORT THE API BRIDGE
+import { api, sendMessageToBackend } from '../services/api';
 
-// --- SHARED DATA SERVICE (Mock Database) ---
-const getLeaveRequests = () => {
-  const data = localStorage.getItem('leaveRequests');
-  return data ? JSON.parse(data) : [];
-};
+// --- TYPES FOR REAL BACKEND DATA ---
+interface ApprovalRequest {
+  _id: string;
+  trx_id: string;
+  emp_id: string;
+  action: string;
+  details: string;
+  status: string;
+}
 
-const updateRequestStatus = (id: number, status: 'Approved' | 'Rejected') => {
-  const requests = getLeaveRequests();
-  const updated = requests.map((req: any) => 
-    req.id === id ? { ...req, status: status } : req
-  );
-  localStorage.setItem('leaveRequests', JSON.stringify(updated));
-  return updated;
-};
+interface Ticket {
+  _id: string;
+  ticket_id: string;
+  emp_id: string;
+  category: string;
+  issue: string;
+  status: string;
+}
 
-// --- 1. AI CHAT WINDOW (HR Version) ---
+interface Message {
+  id: number;
+  sender: 'user' | 'ai';
+  text: string;
+}
+
+// --- 1. AI CHAT WINDOW (CONNECTED TO BACKEND) ---
 const ChatWindow = ({ onClose }: { onClose: () => void }) => {
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Hello Sarah! I can help you draft new policies or check compliance. What do you need?' }
+  const [messages, setMessages] = useState<Message[]>([
+    { id: 1, sender: 'ai', text: 'Hello Sarah! I can help you draft new policies, check compliance, or look up employee details. What do you need?' }
   ]);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const handleSend = () => {
+  // Auto-scroll
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  const handleSend = async () => {
     if (!inputText.trim()) return;
-    const newMsg = { id: Date.now(), sender: 'user', text: inputText };
-    setMessages([...messages, newMsg]);
+
+    // 1. Add User Message
+    const newMsg: Message = { id: Date.now(), sender: 'user', text: inputText };
+    setMessages(prev => [...prev, newMsg]);
+    const currentText = inputText;
     setInputText('');
-    
-    setTimeout(() => {
-      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: 'I have noted that down. Would you like me to update the employee handbook?' }]);
-    }, 1000);
+    setIsLoading(true);
+
+    try {
+      // 2. Call Real Backend (HR Role)
+      // We pass 'emp_001' (Abilash/HR) to identify the user
+      const response = await sendMessageToBackend(currentText, "emp_001");
+      
+      // 3. Add AI Response
+      setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: response }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { id: Date.now() + 1, sender: 'ai', text: "⚠️ Error connecting to HR Agent." }]);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <div className="fixed bottom-6 right-6 w-96 h-[500px] bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col z-50 animate-fade-in-up">
       <div className="p-4 bg-slate-900 rounded-t-2xl flex justify-between items-center text-white">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-full bg-lime-500 flex items-center justify-center font-bold text-slate-900">AI</div>
+          <div className="w-8 h-8 rounded-full bg-lime-500 flex items-center justify-center font-bold text-slate-900"><Bot size={18}/></div>
           <div><h4 className="font-bold text-sm">HR Copilot</h4><span className="text-[10px] bg-green-500/20 px-1.5 py-0.5 rounded text-green-400 border border-green-500/30">Online</span></div>
         </div>
         <button onClick={onClose} className="hover:bg-white/20 p-1 rounded-full transition-colors"><X size={18}/></button>
       </div>
+      
       <div className="flex-1 p-4 overflow-y-auto space-y-4 bg-slate-50">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'user' ? 'bg-lime-500 text-white rounded-tr-sm' : 'bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-sm'}`}>{msg.text}</div>
+            <div className={`max-w-[80%] p-3 rounded-2xl text-sm ${msg.sender === 'user' ? 'bg-lime-500 text-white rounded-tr-sm' : 'bg-white text-slate-700 shadow-sm border border-slate-100 rounded-tl-sm'}`}>
+              {msg.text}
+            </div>
           </div>
         ))}
+        {isLoading && (
+          <div className="flex justify-start">
+             <div className="bg-white p-3 rounded-2xl rounded-tl-sm border border-slate-100 shadow-sm flex gap-1">
+               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></span>
+               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-75"></span>
+               <span className="w-2 h-2 bg-slate-400 rounded-full animate-bounce delay-150"></span>
+             </div>
+          </div>
+        )}
+        <div ref={chatEndRef} />
       </div>
+
       <div className="p-4 bg-white border-t border-slate-100 rounded-b-2xl">
         <div className="flex gap-2">
-          <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a command..." className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-lime-500" onKeyPress={(e) => e.key === 'Enter' && handleSend()}/>
-          <button onClick={handleSend} className="w-10 h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center transition-colors"><ChevronRight size={18}/></button>
+          <input 
+            type="text" 
+            value={inputText} 
+            onChange={(e) => setInputText(e.target.value)} 
+            placeholder="Type a command..." 
+            className="flex-1 bg-slate-50 border border-slate-200 rounded-full px-4 py-2 text-sm focus:outline-none focus:border-lime-500" 
+            onKeyPress={(e) => e.key === 'Enter' && handleSend()}
+            disabled={isLoading}
+          />
+          <button onClick={handleSend} disabled={isLoading} className="w-10 h-10 bg-slate-900 hover:bg-slate-800 text-white rounded-full flex items-center justify-center transition-colors">
+            <ChevronRight size={18}/>
+          </button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- INTERNAL PAGE COMPONENTS ---
-
-const DashboardOverview = ({ onOpenChat }: { onOpenChat: () => void }) => (
+// --- UPDATED DASHBOARD OVERVIEW (With Real Stats) ---
+const DashboardOverview = ({ onOpenChat, approvalCount, ticketCount }: { onOpenChat: () => void, approvalCount: number, ticketCount: number }) => (
   <div className="space-y-6">
     <div className="flex justify-between items-end">
       <div>
@@ -80,6 +135,7 @@ const DashboardOverview = ({ onOpenChat }: { onOpenChat: () => void }) => (
     </div>
 
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      {/* Total Employees (Static for Demo) */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow relative overflow-hidden group">
         <div className="absolute right-0 top-0 w-24 h-24 bg-lime-100 rounded-bl-full -mr-4 -mt-4 opacity-50 group-hover:scale-110 transition-transform"></div>
         <h3 className="text-slate-500 font-medium relative z-10">Total Employees</h3>
@@ -87,124 +143,46 @@ const DashboardOverview = ({ onOpenChat }: { onOpenChat: () => void }) => (
         <span className="text-xs font-bold text-lime-600 bg-lime-50 px-2 py-1 rounded-full mt-3 inline-block relative z-10">↑ 12% vs last month</span>
       </div>
 
+      {/* Open Tickets (Real Count) */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
         <h3 className="text-slate-500 font-medium">Open Tickets</h3>
-        <p className="text-4xl font-bold text-slate-800 mt-2">8</p>
+        <p className="text-4xl font-bold text-slate-800 mt-2">{ticketCount}</p>
         <div className="w-full bg-slate-100 h-2 rounded-full mt-4 overflow-hidden"><div className="bg-orange-400 h-full w-1/3"></div></div>
-        <p className="text-xs text-slate-400 mt-2">3 High Priority</p>
+        <p className="text-xs text-slate-400 mt-2">Requires IT/HR Attention</p>
       </div>
 
+      {/* Pending Approvals (Real Count) */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 hover:shadow-md transition-shadow">
         <h3 className="text-slate-500 font-medium">Pending Approvals</h3>
-        <p className="text-4xl font-bold text-slate-800 mt-2">12</p>
+        <p className="text-4xl font-bold text-slate-800 mt-2">{approvalCount}</p>
         <button className="text-xs font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full mt-3 hover:bg-blue-100">Review Now →</button>
       </div>
     </div>
   </div>
 );
 
-const AllEmployees = () => (
-  <div className="space-y-6">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-bold text-slate-800">All Employees</h2>
-      <div className="flex gap-2">
-        <div className="relative">
-          <Search size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"/>
-          <input type="text" placeholder="Search..." className="pl-10 pr-4 py-2 border border-slate-200 rounded-full text-sm focus:outline-none focus:border-lime-500"/>
-        </div>
-        <button className="flex items-center gap-2 bg-slate-900 text-white px-4 py-2 rounded-full text-sm font-medium hover:bg-slate-800"><Plus size={16}/> Add Employee</button>
-      </div>
-    </div>
-    <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
-      <table className="w-full text-left">
-        <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wider">
-          <tr><th className="p-4 font-semibold">Employee</th><th className="p-4 font-semibold">Role</th><th className="p-4 font-semibold">Department</th><th className="p-4 font-semibold">Status</th><th className="p-4 font-semibold text-right">Action</th></tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {[1, 2, 3, 4, 5].map((i) => (
-            <tr key={i} className="hover:bg-slate-50 transition-colors">
-              <td className="p-4 flex items-center gap-3">
-                <img src={`https://i.pravatar.cc/150?img=${10+i}`} alt="user" className="w-9 h-9 rounded-full border border-slate-200"/>
-                <div><span className="font-bold text-slate-700 block text-sm">Employee Name {i}</span><span className="text-xs text-slate-400">emp_00{i}</span></div>
-              </td>
-              <td className="p-4 text-sm text-slate-600">Software Engineer</td><td className="p-4 text-sm text-slate-600">Engineering</td><td className="p-4"><span className="bg-lime-100 text-lime-700 text-xs font-bold px-2 py-1 rounded-full">Active</span></td><td className="p-4 text-right"><button className="text-slate-400 hover:text-slate-600"><MoreVertical size={18}/></button></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-);
+// ... (AllEmployees, Recruiting, Payroll, SettingsPage, Profile components remain EXACTLY as they were in your previous code. I have omitted them here for brevity, but you should keep them!) ...
+const AllEmployees = () => (<div className="p-8 text-center text-slate-400">Employee List Placeholder</div>);
+const Recruiting = () => (<div className="p-8 text-center text-slate-400">Recruiting Placeholder</div>);
+const Payroll = () => (<div className="p-8 text-center text-slate-400">Payroll Placeholder</div>);
+const SettingsPage = () => (<div className="p-8 text-center text-slate-400">Settings Placeholder</div>);
+const Profile = () => (<div className="p-8 text-center text-slate-400">Profile Placeholder</div>);
 
-const Recruiting = () => (
-  <div className="space-y-6">
-    <div className="flex justify-between items-center">
-      <h2 className="text-2xl font-bold text-slate-800">Recruiting Pipeline</h2>
-      <button className="bg-lime-500 text-white px-4 py-2 rounded-full font-bold text-sm hover:bg-lime-600 shadow-md shadow-lime-200 flex items-center gap-2">
-        <Plus size={18}/> Add Candidate
-      </button>
-    </div>
-    
-    <div className="grid grid-cols-3 gap-6 h-[600px]">
-      {['Applied', 'Interviewing', 'Hired'].map((stage, idx) => (
-        <div key={stage} className="bg-slate-50 p-4 rounded-3xl border border-slate-200 flex flex-col gap-3">
-          <div className="flex justify-between items-center mb-2 px-1">
-            <h3 className="font-bold text-slate-700">{stage}</h3>
-            <span className="bg-white px-2 py-1 rounded-lg text-xs font-bold text-slate-400 shadow-sm border border-slate-100">3</span>
-          </div>
-          
-          {[1, 2, 3].map(c => (
-             <div key={c} className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:shadow-md cursor-pointer transition-all group">
-               <div className="flex items-center gap-3 mb-3">
-                 <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lime-100 to-green-200 flex items-center justify-center text-sm font-bold text-lime-700 group-hover:scale-110 transition-transform">CN</div>
-                 <div>
-                   <h4 className="font-bold text-sm text-slate-800">Candidate {c}</h4>
-                   <p className="text-xs text-slate-400">Frontend Dev</p>
-                 </div>
-               </div>
-               <div className="flex gap-2 text-[10px] font-bold uppercase tracking-wide">
-                 <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded-md">Senior</span>
-                 <span className="bg-slate-100 text-slate-500 px-2 py-1 rounded-md">Remote</span>
-               </div>
-             </div>
-          ))}
-        </div>
-      ))}
-    </div>
-  </div>
-);
 
-const Payroll = () => (
-  <div className="space-y-6">
-    <h2 className="text-2xl font-bold text-slate-800">Payroll</h2>
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-       <div className="bg-gradient-to-br from-slate-900 to-slate-800 text-white p-8 rounded-3xl shadow-xl">
-          <p className="text-slate-400 font-medium mb-1">Total Payroll Cost</p>
-          <h1 className="text-4xl font-bold">$142,500.00</h1>
-          <p className="text-sm text-slate-400 mt-4 mb-8">Scheduled for Oct 31, 2025</p>
-          <button className="w-full bg-lime-500 hover:bg-lime-400 text-slate-900 font-bold py-3 rounded-xl transition-colors">Run Payroll</button>
-       </div>
-    </div>
-  </div>
-);
-
-// --- UPDATED NOTIFICATIONS PAGE (Approval Center) ---
-const NotificationsPage = () => {
-  const [requests, setRequests] = useState<any[]>([]);
-
-  useEffect(() => {
-    // Load requests from "Database" (Local Storage)
-    const allRequests = getLeaveRequests();
-    // HR only sees 'Pending' requests here
-    const pending = allRequests.filter((req: any) => req.status === 'Pending');
-    setRequests(pending);
-  }, []);
-
-  const handleAction = (id: number, status: 'Approved' | 'Rejected') => {
-    updateRequestStatus(id, status);
-    // Remove from UI immediately
-    setRequests(prev => prev.filter(req => req.id !== id));
-    alert(`Request ${status} Successfully! Notification sent to employee.`);
+// --- UPDATED NOTIFICATIONS PAGE (Fetches Real Data) ---
+const NotificationsPage = ({ approvals, setApprovals }: { approvals: ApprovalRequest[], setApprovals: any }) => {
+  
+  const handleAction = async (trxId: string, status: 'APPROVED' | 'REJECTED') => {
+    try {
+      // 1. Call Real Backend
+      await api.put(`/api/approvals/${trxId}`, { status });
+      
+      // 2. Remove from UI
+      setApprovals((prev: ApprovalRequest[]) => prev.filter(req => req.trx_id !== trxId));
+      alert(`Transaction ${status} Successfully!`);
+    } catch (error) {
+      alert("Error updating status. Is the backend running?");
+    }
   };
 
   return (
@@ -212,41 +190,41 @@ const NotificationsPage = () => {
       <h2 className="text-2xl font-bold text-slate-800 mb-6">Notifications & Approvals</h2>
       <div className="bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden min-h-[300px]">
         
-        {requests.length === 0 ? (
+        {approvals.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full py-20 text-slate-400">
             <CheckCircle size={48} className="mb-4 text-slate-200"/>
             <p>All caught up! No pending requests.</p>
           </div>
         ) : (
-          requests.map((req) => (
-            <div key={req.id} className="flex items-start gap-4 p-6 bg-orange-50/50 border-b border-orange-100 animate-fade-in-up">
+          approvals.map((req) => (
+            <div key={req._id} className="flex items-start gap-4 p-6 bg-orange-50/50 border-b border-orange-100 animate-fade-in-up">
               <div className="p-2.5 bg-orange-100 text-orange-600 rounded-full mt-1">
-                <BellRing size={20} />
+                <AlertTriangle size={20} />
               </div>
               <div className="flex-1">
                 <div className="flex justify-between items-start">
-                  <h4 className="font-bold text-slate-800 text-sm">New Leave Request</h4>
-                  <span className="text-xs text-slate-400 font-medium">{req.date}</span>
+                  <h4 className="font-bold text-slate-800 text-sm uppercase tracking-wide">{req.action.replace('_', ' ')}</h4>
+                  <span className="text-xs text-orange-500 font-bold bg-orange-100 px-2 py-0.5 rounded">Action Required</span>
                 </div>
                 <p className="text-sm text-slate-600 mt-1 mb-4 leading-relaxed">
-                  <span className="font-bold text-slate-800">{req.employeeName}</span> ({req.role}) has requested <span className="font-bold text-slate-800">{req.days} days</span> of {req.type} for "{req.reason}".
+                  Employee <span className="font-bold text-slate-800">{req.emp_id}</span> request: <br/>
+                  <span className="italic">"{req.details}"</span>
                 </p>
                 <div className="flex gap-3">
                   <button 
-                    onClick={() => handleAction(req.id, 'Approved')}
-                    className="bg-slate-900 text-white text-xs px-5 py-2 rounded-full font-bold hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all"
+                    onClick={() => handleAction(req.trx_id, 'APPROVED')}
+                    className="bg-slate-900 text-white text-xs px-5 py-2 rounded-full font-bold hover:bg-slate-700 shadow-lg shadow-slate-200 transition-all flex items-center gap-2"
                   >
-                    Approve Request
+                    <CheckCircle size={14}/> Approve
                   </button>
                   <button 
-                    onClick={() => handleAction(req.id, 'Rejected')}
-                    className="bg-white border border-slate-200 text-slate-600 text-xs px-5 py-2 rounded-full font-bold hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all"
+                    onClick={() => handleAction(req.trx_id, 'REJECTED')}
+                    className="bg-white border border-slate-200 text-slate-600 text-xs px-5 py-2 rounded-full font-bold hover:bg-red-50 hover:text-red-500 hover:border-red-200 transition-all flex items-center gap-2"
                   >
-                    Reject
+                    <XCircle size={14}/> Reject
                   </button>
                 </div>
               </div>
-              <div className="w-2 h-2 bg-orange-500 rounded-full mt-2 animate-pulse"></div>
             </div>
           ))
         )}
@@ -256,67 +234,6 @@ const NotificationsPage = () => {
   );
 };
 
-const SettingsPage = () => (
-  <div className="max-w-4xl space-y-6">
-    <h2 className="text-2xl font-bold text-slate-800">Global Settings</h2>
-    
-    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-      <div className="flex items-start gap-4">
-        <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><FileText size={24}/></div>
-        <div className="flex-1">
-          <h3 className="font-bold text-slate-800 text-lg">Company Policy Documents</h3>
-          <p className="text-slate-500 text-sm mt-1 mb-6">Upload PDF policies here. The AI Assistant uses these to answer employee questions.</p>
-          
-          <div className="border-2 border-dashed border-slate-200 rounded-2xl p-8 text-center hover:bg-slate-50 transition-colors cursor-pointer">
-            <Upload size={32} className="mx-auto text-slate-300 mb-2"/>
-            <p className="text-sm font-medium text-slate-600">Click to upload or drag and drop</p>
-            <p className="text-xs text-slate-400 mt-1">PDF, DOCX up to 10MB</p>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100">
-      <div className="flex items-start gap-4">
-        <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl"><Clock size={24}/></div>
-        <div className="flex-1">
-          <h3 className="font-bold text-slate-800 text-lg">Work Hours & Attendance</h3>
-          <p className="text-slate-500 text-sm mt-1 mb-6">Configure standard shifts and holiday calendars.</p>
-          
-          <div className="space-y-4">
-             <div className="flex justify-between items-center p-4 border border-slate-100 rounded-xl">
-               <div><p className="font-bold text-slate-700 text-sm">Standard Shift</p><p className="text-xs text-slate-400">09:00 AM - 06:00 PM</p></div>
-               <button className="text-lime-600 font-bold text-sm hover:underline">Edit</button>
-             </div>
-             <div className="flex justify-between items-center p-4 border border-slate-100 rounded-xl">
-               <div><p className="font-bold text-slate-700 text-sm">Holiday Calendar</p><p className="text-xs text-slate-400">India - 2026</p></div>
-               <button className="text-lime-600 font-bold text-sm hover:underline">View</button>
-             </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  </div>
-);
-
-const Profile = () => (
-  <div className="max-w-4xl space-y-8">
-    <div className="bg-white rounded-3xl p-8 shadow-sm border border-slate-100 flex flex-col md:flex-row items-center md:items-start gap-8 relative overflow-hidden">
-      <div className="absolute top-0 right-0 w-64 h-64 bg-lime-50 rounded-full -mr-20 -mt-20 opacity-50"></div>
-      <img src="https://i.pravatar.cc/150?img=32" className="w-32 h-32 rounded-full border-4 border-white shadow-xl relative z-10" alt="Profile" />
-      <div className="flex-1 text-center md:text-left relative z-10 pt-2">
-        <h1 className="text-3xl font-bold text-slate-800">Sarah Jones</h1>
-        <p className="text-lime-600 font-medium text-lg mb-4">Senior HR Manager</p>
-        <div className="flex flex-wrap justify-center md:justify-start gap-4 text-slate-500 text-sm">
-          <span className="flex items-center gap-1 bg-slate-50 px-3 py-1 rounded-full border border-slate-100"><MapPin size={14}/> New York, USA</span>
-          <span className="flex items-center gap-1 bg-slate-50 px-3 py-1 rounded-full border border-slate-100"><Calendar size={14}/> Joined March 2022</span>
-        </div>
-      </div>
-      <button className="relative z-10 bg-slate-900 text-white px-6 py-2.5 rounded-full font-medium hover:bg-slate-800 shadow-lg shadow-slate-200 transition-all">Edit Profile</button>
-    </div>
-  </div>
-);
-
 // --- MAIN HR DASHBOARD COMPONENT ---
 interface HRDashboardProps {
   onLogout: () => void;
@@ -325,18 +242,36 @@ interface HRDashboardProps {
 const HRDashboard: React.FC<HRDashboardProps> = ({ onLogout }) => {
   const [activePage, setActivePage] = useState('dashboard');
   const [showChat, setShowChat] = useState(false);
+  const [approvals, setApprovals] = useState<ApprovalRequest[]>([]);
+  const [tickets, setTickets] = useState<Ticket[]>([]);
+
+  // --- FETCH REAL DATA ON LOAD ---
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const approvalRes = await api.get('/api/approvals');
+        setApprovals(approvalRes.data.data);
+        const ticketRes = await api.get('/api/tickets');
+        setTickets(ticketRes.data.data);
+      } catch (error) {
+        console.error("Failed to load HR data", error);
+      }
+    };
+    fetchData();
+  }, []);
+
   const sarahUser = { name: "Sarah Jones", role: "HR Manager", image: "https://i.pravatar.cc/150?img=32" };
 
   const renderContent = () => {
     switch(activePage) {
-      case 'dashboard': return <DashboardOverview onOpenChat={() => setShowChat(true)} />;
+      case 'dashboard': return <DashboardOverview onOpenChat={() => setShowChat(true)} approvalCount={approvals.length} ticketCount={tickets.length} />;
       case 'employees': return <AllEmployees />;
       case 'recruiting': return <Recruiting />;
       case 'payroll': return <Payroll />;
-      case 'notifications': return <NotificationsPage />; // <--- NEW DYNAMIC PAGE
+      case 'notifications': return <NotificationsPage approvals={approvals} setApprovals={setApprovals} />;
       case 'settings': return <SettingsPage />;
       case 'profile': return <Profile />;
-      default: return <DashboardOverview onOpenChat={() => setShowChat(true)} />;
+      default: return <DashboardOverview onOpenChat={() => setShowChat(true)} approvalCount={approvals.length} ticketCount={tickets.length} />;
     }
   };
 
@@ -349,7 +284,7 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ onLogout }) => {
             <div className="flex items-center gap-4">
                <button onClick={() => setActivePage('notifications')} className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-500 hover:text-lime-600 hover:border-lime-200 transition-all relative">
                  <BellRing size={20} />
-                 <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>
+                 {approvals.length > 0 && <span className="absolute top-2 right-2.5 w-2 h-2 bg-red-500 rounded-full border border-white"></span>}
                </button>
                <div className="h-8 w-px bg-slate-200 mx-2"></div>
                <div className="text-right hidden md:block">

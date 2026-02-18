@@ -1,8 +1,13 @@
 import axios from 'axios';
 
 // 1. Point to your Backend
-// If running locally, use localhost. If using ngrok, use the ngrok URL.
+// ⚠️ CRITICAL UPDATE: We switched this to Localhost.
+// Why? Your new Login code exists on your Laptop, but NOT on Render yet.
+// If you use the Render link, it will say "404 Not Found" for the new login features.
 const API_URL = "http://127.0.0.1:8000"; 
+
+// Keep the Render link here for later (commented out)
+// const API_URL = "https://innovix-hr-agent.onrender.com"; 
 
 // Create a configured axios instance
 export const api = axios.create({
