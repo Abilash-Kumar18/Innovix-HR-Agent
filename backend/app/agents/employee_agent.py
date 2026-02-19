@@ -66,9 +66,10 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
 
     # --- 2. THE DYNAMIC SECURITY PROMPT ---
     # --- 2. THE DYNAMIC SECURITY PROMPT ---
+    # --- 2. THE DYNAMIC SECURITY PROMPT ---
     system_instruction = (
-        f"You are the Innovix HR Agentic AI. "
-        f"You are currently chatting with {user_name} (ID: {employee_id}). "
+        f"You are the Innvoix HR Agentic AI. "
+        f"Chatting with {user_name} (ID: {employee_id}). Role: {role_title}. "
         f"Their official role/department is: {role_title}. "
         "\n\n--- SECURITY & ACCESS CONTROL RULES ---\n"
         "1. Standard Employees can ONLY ask about policies, check their own leave balance, apply for leave, and raise tickets.\n"
@@ -81,27 +82,49 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         "You must first converse with them to collect the new hire's Bank Account Number and Emergency Contact Number. "
         "Only call the onboard tool once you have all the data.\n"
         "5. OFFBOARDING: When offboarding, ensure you ask for the specific offboard date if it wasn't provided.\n"
-        "\n--- DATA PRIVACY & MASKING RULES ---\n"
-        "6. If you retrieve an employee's personal details (like Bank Account, SSN, or Emergency Contact) from the database, "
-        "you MUST dynamically mask the data in your final response to the user. "
-        "For example, if the bank account is 123456789, output it as *****6789. Never display the full sensitive number."
+        "\n--- DATA PRIVACY & ESCALATION RULES ---\n"
+        "6. DATA MASKING: If you retrieve an employee's personal details (like Bank Account) from the database, "
+        "you MUST dynamically mask the data in your final response (e.g., output *****6789).\n"
+        "7. TICKET ESCALATION: When an employee asks to speak to HR or raises a complex issue, "
+        "you must analyze the chat history and use the 'raise_hr_ticket' tool. Pass a detailed, bulleted summary "
+        "of their exact problem into the 'issue_summary' parameter so human HR staff can respond quickly."
     )
-    # --- MEMORY MANAGEMENT ---
-    # 1. Add the user's new message to the memory
-    chat_memory.append(("user", user_message))
+    session_record = await db.chat_sessions.find_one({"employee_id": employee_id})
     
-    # 2. Combine the System Prompt with the ENTIRE conversation history
-    messages = [SystemMessage(content=system_instruction)] + chat_memory
-    messages = [SystemMessage(content=system_instruction), ("user", user_message)]
+    if session_record:
+        # Extract the history array from the database
+        db_history = session_record.get("history", [])
+        # Convert it to the tuple format LangGraph expects: [("user", "hi"), ("assistant", "hello")]
+        formatted_memory = [(msg["role"], msg["content"]) for msg in db_history]
+    else:
+        db_history = []
+        formatted_memory = []
 
-    # --- 3. THE FALLBACK LOOP (Keep your existing execution loop) ---
+    # Add the current message to the execution payload
+    formatted_memory.append(("user", user_message))
+    messages = [SystemMessage(content=system_instruction)] + formatted_memory
+
+    # --- 5. EXECUTION & DATABASE SAVING ---
     for attempt in range(len(VALID_KEYS)):
         try:
-            agent_executor = get_agent_executor()
+            agent_executor = get_agent_executor(safe_tools) 
             response = await agent_executor.ainvoke({"messages": messages})
-            raw_content = response["messages"][-1].content
-            chat_memory.append(("assistant", raw_content))
-            return clean_response(raw_content)
+            ai_reply = response["messages"][-1].content
+            clean_reply = clean_response(ai_reply)
+            
+            # 💾 THE PERSISTENCE UPGRADE: Save the new exchange back to MongoDB!
+            db_history.append({"role": "user", "content": user_message})
+            db_history.append({"role": "assistant", "content": clean_reply})
+            
+            # Upsert means: Update if exists, Create if it doesn't
+            await db.chat_sessions.update_one(
+                {"employee_id": employee_id},
+                {"$set": {"history": db_history}},
+                upsert=True
+            )
+            
+            return clean_reply
+
         except Exception as e:
             error_msg = str(e).lower()
             if "429" in error_msg or "quota" in error_msg or "exhausted" in error_msg:

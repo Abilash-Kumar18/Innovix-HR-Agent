@@ -113,23 +113,46 @@ async def get_upcoming_holidays() -> str:
     return f"Here are the upcoming company holidays:\n{holidays_str}"
 
 @tool
-async def raise_hr_ticket(employee_id: str, issue_category: str, description: str) -> str:
-    """Useful for raising an HR, IT, or Payroll support ticket."""
-    print(f"🛠️ TOOL CALLED: Raising {issue_category} ticket for {employee_id}")
+async def raise_hr_ticket(employee_id_or_name: str, issue_summary: str) -> str:
+    """
+    STRICT RULE: DO NOT use this tool on the user's first complaint. 
+    You MUST ask the user 1 or 2 clarifying questions first to understand the root cause (e.g., "How much was it short?", "Did you work overtime?"). 
+    ONLY trigger this tool AFTER they reply with more details, OR if they explicitly demand a ticket.
+    The 'issue_summary' MUST be a detailed, bulleted summary of the entire chat history.
+    """
+    print(f"🛠️ TOOL CALLED: Raising HR ticket for {employee_id_or_name}")
     
-    # Generate ID based on current document count
+    # Smart lookup: Try ID first, then fallback to Name
+    emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
+    if not emp:
+        emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
+        
+    if not emp: 
+        return f"Cannot raise ticket: Employee '{employee_id_or_name}' not found."
+    
+    actual_emp_id = emp["employee_id"]
+    
+    # Generate a unique ticket ID
     count = await db.hr_tickets.count_documents({})
-    ticket_id = f"TKT-{count + 101}"
+    ticket_id = f"TKT-{count + 1000}"
     
+    # Insert the summarized ticket into MongoDB
     await db.hr_tickets.insert_one({
         "ticket_id": ticket_id,
-        "emp_id": employee_id,
-        "category": issue_category,
-        "issue": description,
-        "status": "Open"
+        "emp_id": actual_emp_id, 
+        "employee_name": emp["name"],
+        "issue_summary": issue_summary,
+        "status": "Open",
+        "created_at": datetime.utcnow()
     })
     
-    return f"SUCCESS: Ticket {ticket_id} has been raised for the {issue_category} department regarding: '{description}'. The team will contact you soon."
+    # Log the action (from Phase 2)
+    await log_audit_action(
+        action_name="RAISE_TICKET", 
+        details=f"Escalated ticket {ticket_id} for {emp['name']}."
+    )
+    
+    return f"SUCCESS: Ticket {ticket_id} has been raised for {emp['name']}. A detailed summary has been sent to the HR team."
 
 @tool
 async def onboard_employee(new_hire_name: str, role: str, department: str, bank_account: str, emergency_contact: str) -> str:
@@ -203,6 +226,7 @@ async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str
         "effective_date": offboard_date,
         "status": "Pending Payroll Action"
     })
+    
     await log_audit_action(
         action_name="OFFBOARD_EMPLOYEE", 
         details=f"Offboarded {emp_name} (ID: {actual_emp_id}) on {offboard_date}."
