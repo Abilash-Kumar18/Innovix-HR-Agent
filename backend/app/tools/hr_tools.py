@@ -4,6 +4,8 @@ from dotenv import load_dotenv
 from langchain_core.tools import tool
 from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
+from google.oauth2 import service_account
+from googleapiclient.discovery import build
 
 load_dotenv()
 
@@ -19,6 +21,75 @@ MOCK_HOLIDAYS = [
     {"date": "2026-10-14", "name": "Ayudha Pooja"},
     {"date": "2026-11-08", "name": "Diwali"}
 ]
+
+# --- GOOGLE CALENDAR AUTH SETUP ---
+SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
+SERVICE_ACCOUNT_FILE = 'data/google_credentials.json'
+
+def get_calendar_service():
+    """Authenticates with Google Cloud using the Service Account JSON."""
+    creds = service_account.Credentials.from_service_account_file(
+        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    return build('calendar', 'v3', credentials=creds)
+
+@tool
+async def check_google_calendar_for_leaves(employee_id: str, target_month_num: int, target_year: int = 2026) -> str:
+    """
+    Useful for checking REAL Google Calendar holidays to suggest vacation days.
+    Input requires the employee_id, target_month_num (1-12), and target_year.
+    """
+    print(f"🛠️ TOOL CALLED: Fetching live Google Calendar for month {target_month_num}")
+    
+    # 1. Check Employee Leave Balance
+    emp = await db.employees.find_one({"employee_id": employee_id.lower()})
+    if not emp:
+        return "Error: Employee not found."
+        
+    leaves_left = emp.get("casual_leaves_left", 0)
+    if leaves_left <= 0:
+        return "You have 0 casual leaves remaining. I cannot suggest a vacation."
+
+   # 2. Setup Date Ranges for the Google API
+    # Start of the month
+    time_min = datetime(target_year, target_month_num, 1, 0, 0, 0).isoformat() + 'Z' 
+    # End of the month
+    if target_month_num == 12:
+        time_max = datetime(target_year + 1, 1, 1, 0, 0, 0).isoformat() + 'Z'
+    else:
+        time_max = datetime(target_year, target_month_num + 1, 1, 0, 0, 0).isoformat() + 'Z'
+
+
+    # 3. Call the actual Google Calendar API
+    try:
+        service = get_calendar_service()
+        calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
+        
+        events_result = service.events().list(
+            calendarId=calendar_id, 
+            timeMin=time_min,
+            timeMax=time_max, 
+            singleEvents=True,
+            orderBy='startTime'
+        ).execute()
+        
+        holidays = events_result.get('items', [])
+        
+        if not holidays:
+            return f"You have {leaves_left} leaves, but there are no official company holidays listed in Google Calendar for month {target_month_num}."
+            
+        # 4. Format the output so LangGraph can read it and do the math
+        calendar_summary = f"You have {leaves_left} casual leaves left.\n\nHere are the live events from the Google Calendar:\n"
+        for event in holidays:
+            start = event['start'].get('dateTime', event['start'].get('date'))
+            calendar_summary += f"- {event['summary']} on {start}\n"
+            
+        calendar_summary += "\nAI INSTRUCTION: Look at these dates. If any fall on a Tuesday or Thursday, explicitly suggest that the user takes Monday or Friday off to get a 4-day long weekend."
+        
+        return calendar_summary
+
+    except Exception as e:
+        return f"❌ Google Calendar API Error: {str(e)}"
+
 
 # --- AUDIT LOGGING HELPER ---
 async def log_audit_action(action_name: str, details: str):
