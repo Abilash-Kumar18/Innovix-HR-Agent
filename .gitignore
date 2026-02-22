@@ -29,10 +29,8 @@ pnpm-debug.log*
 *.sln
 *.sw?
 backend/data/google_credentials.json
+google_credentials.json
 node_modules/
 dist/
 dist-ssr
 *.local
-
-
-
