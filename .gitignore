@@ -7,7 +7,7 @@ __pycache__/
 backend/.env
 backend/.venv/
 backend/.venv1/
-
+Frontend/.env
 # Logs
 logs
 *.log
@@ -28,6 +28,7 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
+<<<<<<< HEAD
 
 Frontend/.env
 
@@ -37,3 +38,10 @@ node_modules/
 dist/
 dist-ssr
 *.local
+=======
+Frontend/node_modules/
+node_modules/
+Frontend/dist/
+Frontend/dist-ssr
+Frontend/*.local
+>>>>>>> devaroopa
