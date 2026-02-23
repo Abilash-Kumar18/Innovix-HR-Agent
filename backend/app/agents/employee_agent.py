@@ -88,6 +88,11 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         "8. TICKET ESCALATION: When an employee asks to speak to HR or raises a complex issue, "
         "you must analyze the chat history and use the 'raise_hr_ticket' tool. Pass a detailed, bulleted summary "
         "of their exact problem into the 'issue_summary' parameter so human HR staff can respond quickly."
+        "\n--- LEAVE APPLICATION WORKFLOW ---\n"
+        "9. WHEN APPLYING FOR LEAVE, YOU MUST FOLLOW THESE EXACT STEPS IN ORDER:\n"
+        "   - First: Use the 'check_google_calendar_for_leaves' tool to check their balance and suggest long weekends.\n"
+        "   - Second: You MUST ask the employee for the specific REASON for their leave.\n"
+        "   - Third: Only after the employee provides the dates AND the reason, use the 'apply_for_leave' tool to submit it."
     )
     
     session_record = await db.chat_sessions.find_one({"employee_id": employee_id})

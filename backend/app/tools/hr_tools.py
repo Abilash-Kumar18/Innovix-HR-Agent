@@ -1,4 +1,5 @@
 import os
+import smtplib
 import certifi
 from dotenv import load_dotenv
 from langchain_core.tools import tool
@@ -6,6 +7,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from datetime import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
+from email.message import EmailMessage
 
 load_dotenv()
 
@@ -31,6 +33,41 @@ def get_calendar_service():
     creds = service_account.Credentials.from_service_account_file(
         SERVICE_ACCOUNT_FILE, scopes=SCOPES)
     return build('calendar', 'v3', credentials=creds)
+
+def send_leave_email_to_hr(employee_name: str, start_date: str, end_date: str, reason: str):
+    """Sends an automated email to the HR department."""
+    
+    # You will need to add these 3 variables to your .env file!
+    sender_email = os.getenv("SENDER_EMAIL") 
+    sender_password = os.getenv("SENDER_PASSWORD") # This must be a Gmail App Password
+    hr_email = os.getenv("HR_EMAIL", "hr@innvoix.com")
+    
+    if not sender_email or not sender_password:
+        print("⚠️ Email credentials not set in .env. Skipping email notification.")
+        return
+
+    msg = EmailMessage()
+    msg.set_content(
+        f"Hello HR,\n\n"
+        f"A new leave request has been submitted and requires your approval.\n\n"
+        f"Employee: {employee_name}\n"
+        f"Dates: {start_date} to {end_date}\n"
+        f"Reason: {reason}\n\n"
+        f"Please log in to the Innvoix HR Dashboard to approve or reject this request."
+    )
+    
+    msg['Subject'] = f"Action Required: Leave Request from {employee_name}"
+    msg['From'] = sender_email
+    msg['To'] = hr_email
+
+    try:
+        # Securely connect to Gmail's server and send the email
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(sender_email, sender_password)
+            smtp.send_message(msg)
+            print(f"📧 Notification email successfully sent to {hr_email}!")
+    except Exception as e:
+        print(f"❌ Failed to send email: {e}")
 
 @tool
 async def check_google_calendar_for_leaves(employee_id: str, target_month_num: int, target_year: int = 2026) -> str:
@@ -123,7 +160,39 @@ async def get_employee_details(employee_id_or_name: str) -> str:
 
 
 @tool
-async def apply_for_leave(employee_id_or_name: str, leave_type: str, days: int) -> str:
+async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: str, reason: str) -> str:
+    """
+    Submits a leave request for the employee to HR. 
+    MUST include the start_date, end_date, and the specific reason for the leave.
+    """
+    print(f"🛠️ TOOL CALLED: Applying for leave for {employee_id_or_name} from {start_date} to {end_date}")
+    
+    # Smart lookup
+    emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
+    if not emp:
+        emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
+        
+    if not emp: 
+        return f"Cannot apply for leave: Employee '{employee_id_or_name}' not found."
+    
+    actual_emp_id = emp["employee_id"]
+    emp_name = emp["name"]
+    
+    # Insert the request (WITH the reason) into the HR Approvals database
+    leave_request = {
+        "emp_id": actual_emp_id,
+        "employee_name": emp_name,
+        "start_date": start_date,
+        "end_date": end_date,
+        "reason": reason,
+        "status": "Pending HR Approval"
+    }
+    await db.leaves.insert_one(leave_request)
+    
+    # Trigger the real-world email alert!
+    send_leave_email_to_hr(emp_name, start_date, end_date, reason)
+    
+    return f"SUCCESS: Leave request for {start_date} to {end_date} submitted. HR has been notified via email and will review your reason: '{reason}'."
     """
     Useful to apply for leave. 
     Input 'employee_id_or_name' can be the ID or Name, 'leave_type' ('casual' or 'sick'), and 'days'.
