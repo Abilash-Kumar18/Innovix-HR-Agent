@@ -1,133 +1,119 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Users, 
-  FileText, 
-  CheckSquare, 
-  MessageSquare, 
-  ChevronLeft, 
-  ChevronRight,
-  LogOut,
-  UserCircle,
-  Calendar as CalendarIcon 
-} from 'lucide-react';
+import { LayoutDashboard, Users, Briefcase, FileText, Settings, LogOut, Bell, Menu, MessageSquare, Calendar as CalendarIcon } from 'lucide-react';
 
-// 1. UPDATE THE INTERFACE HERE
 interface SidebarProps {
   activePage: string;
   setActivePage: (page: string) => void;
   onLogout: () => void;
-  role: 'hr' | 'employee';
-  // Add these missing properties:
-  user?: {
-    name: string;
-    role: string;
-    image: string;
-  };
-  isCollapsed?: boolean;
-  toggleSidebar?: () => void;
+  isCollapsed: boolean;
+  toggleSidebar: () => void;
+  role?: 'hr' | 'employee';
+  user?: any;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
   activePage, 
   setActivePage, 
   onLogout, 
-  role, 
-  // Destructure the new props here:
-  user,
-  isCollapsed = false, 
-  toggleSidebar 
+  isCollapsed, 
+  toggleSidebar, 
+  role = 'hr' 
 }) => {
   
-  // Define menu items based on role
-  const menuItems = role === 'hr' ? [
-    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-    { id: 'employees', label: 'All Employees', icon: Users },
-    { id: 'approvals', label: 'Approvals', icon: CheckSquare },
-    { id: 'calendar', icon: CalendarIcon, label: "Calendar" }, 
-    { id: 'payroll', label: 'Payroll', icon: FileText },
-    { id: 'chat', label: 'AI Assistant', icon: MessageSquare },
-  ] : [
-    { id: 'dashboard', label: 'My Dashboard', icon: LayoutDashboard },
-    { id: 'profile', label: 'My Profile', icon: Users },
-    { id: 'notifications', label: 'Leave Requests', icon: CheckSquare },
-    { id: 'calendar', icon: CalendarIcon, label: "Calendar" }, 
-    { id: 'payroll', label: 'My Payslips', icon: FileText },
-    { id: 'chat', label: 'AI Assistant', icon: MessageSquare },
+  const allMenuItems = [
+    { id: 'dashboard', icon: LayoutDashboard, label: "Dashboard" },
+    { id: 'employees', icon: Users, label: role === 'hr' ? "All Employees" : "My Team" },
+    { id: 'recruiting', icon: Briefcase, label: "Recruiting", hidden: role === 'employee' },
+    { id: 'calendar', icon: CalendarIcon, label: "Calendar" }, // <--- CALENDAR BUTTON IS HERE
+    { id: 'payroll', icon: FileText, label: "Payroll" },
+    { id: 'notifications', icon: Bell, label: "Notifications" },
+    { id: 'chat', icon: MessageSquare, label: role === 'hr' ? "AI Copilot" : "AI Assistant" }, 
+    { id: 'settings', icon: Settings, label: "Settings", hidden: role === 'employee' },
   ];
 
+  const visibleMenuItems = allMenuItems.filter(item => !item.hidden);
+
   return (
-    <aside className={`h-screen bg-slate-900 text-white transition-all duration-300 flex flex-col fixed left-0 top-0 z-50 ${isCollapsed ? 'w-20' : 'w-64'}`}>
+    <aside 
+      className={`
+        h-screen bg-white fixed left-0 top-0 flex flex-col border-r border-slate-100 z-50 transition-all duration-300
+        ${isCollapsed ? 'w-20' : 'w-64'} 
+        p-4 
+      `}
+    >
       
-      {/* Header / Logo */}
-      <div className="p-6 flex items-center justify-between border-b border-slate-800">
-        {!isCollapsed && (
-          <div className="flex items-center gap-2 font-bold text-xl tracking-tight">
-            <div className="w-8 h-8 bg-lime-500 rounded-lg flex items-center justify-center text-slate-900">I</div>
-            <span>Innvoix</span>
-          </div>
-        )}
-        {isCollapsed && (
-           <div className="w-8 h-8 bg-lime-500 rounded-lg flex items-center justify-center text-slate-900 mx-auto font-bold">I</div>
-        )}
-        
-        {toggleSidebar && (
-          <button onClick={toggleSidebar} className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 transition-colors absolute -right-3 top-8 border border-slate-700 shadow-md">
-            {isCollapsed ? <ChevronRight size={14}/> : <ChevronLeft size={14}/>}
-          </button>
-        )}
+      {/* 1. Logo Section */}
+      <div className="flex items-center gap-3 mb-6 px-2 h-10 overflow-hidden">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-lime-500 to-green-600 flex items-center justify-center text-white font-bold text-xl shadow-lg shadow-lime-200 shrink-0">
+          I
+        </div>
+        <h1 
+          className={`
+            text-2xl font-bold text-slate-800 tracking-tight whitespace-nowrap transition-all duration-300 origin-left
+            ${isCollapsed ? 'opacity-0 w-0 scale-0' : 'opacity-100 w-auto scale-100'}
+          `}
+        >
+          Innvoix HR
+        </h1>
       </div>
 
-      {/* Navigation Links */}
-      <nav className="flex-1 py-6 px-3 space-y-2">
-        {menuItems.map((item) => (
+      {/* 2. Hamburger Toggle */}
+      <div className="mb-6 px-2 flex justify-start">
+        <button 
+          onClick={toggleSidebar} 
+          className="w-10 h-10 flex items-center justify-center hover:bg-slate-100 rounded-lg text-slate-500 transition-colors"
+          title="Toggle Sidebar"
+        >
+          <Menu size={20} />
+        </button>
+      </div>
+
+      {/* 3. Navigation Menu */}
+      <nav className="flex-1 space-y-2">
+        {visibleMenuItems.map((item) => (
           <button
             key={item.id}
             onClick={() => setActivePage(item.id)}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group
-              ${activePage === item.id 
-                ? 'bg-lime-500 text-slate-900 font-bold shadow-lg shadow-lime-500/20' 
-                : 'text-slate-400 hover:bg-slate-800 hover:text-white'
-              } ${isCollapsed ? 'justify-center' : ''}`}
+            className={`
+              w-full flex items-center gap-4 px-3 py-3 rounded-full transition-all duration-300 font-medium
+              ${activePage === item.id
+                ? 'bg-gradient-to-r from-lime-500 to-green-500 text-white shadow-md shadow-lime-200' 
+                : 'text-slate-500 hover:bg-slate-50 hover:text-lime-600'
+              }
+              justify-start
+            `}
+            title={isCollapsed ? item.label : ''}
           >
-            <item.icon size={20} className={activePage === item.id ? 'text-slate-900' : 'group-hover:text-lime-400'} />
-            {!isCollapsed && <span>{item.label}</span>}
+            <item.icon size={20} className="shrink-0" />
+            <span 
+              className={`whitespace-nowrap transition-all duration-300 origin-left
+                ${isCollapsed ? 'opacity-0 w-0 scale-0' : 'opacity-100 w-auto scale-100'}
+              `}
+            >
+              {item.label}
+            </span>
           </button>
         ))}
       </nav>
 
-      {/* User Profile Snippet (Bottom) */}
-      <div className="p-4 border-t border-slate-800">
-        <div className={`flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 ${isCollapsed ? 'justify-center' : ''}`}>
-          {user ? (
-             <img src={user.image} alt="User" className="w-10 h-10 rounded-full object-cover border-2 border-slate-600" />
-          ) : (
-             <div className="w-10 h-10 rounded-full bg-slate-700 flex items-center justify-center text-slate-400">
-               <UserCircle size={24} />
-             </div>
-          )}
-          
-          {!isCollapsed && (
-            <div className="flex-1 overflow-hidden">
-              <p className="text-sm font-bold text-white truncate">{user?.name || 'User'}</p>
-              <p className="text-xs text-slate-400 truncate capitalize">{user?.role || role}</p>
-            </div>
-          )}
-          
-          {!isCollapsed && (
-            <button onClick={onLogout} className="text-slate-400 hover:text-red-400 transition-colors">
-              <LogOut size={18} />
-            </button>
-          )}
-        </div>
-        
-        {/* Collapsed Logout Button */}
-        {isCollapsed && (
-           <button onClick={onLogout} className="w-full mt-2 flex justify-center text-slate-400 hover:text-red-400 p-2">
-              <LogOut size={20} />
-           </button>
-        )}
+      {/* 4. Logout Section */}
+      <div className="pt-6 border-t border-slate-100">
+        <button 
+          onClick={onLogout}
+          className="w-full flex items-center gap-4 px-3 py-3 text-red-500 hover:bg-red-50 rounded-xl transition-colors font-medium justify-start"
+          title="Logout"
+        >
+          <LogOut size={20} className="shrink-0" />
+          <span 
+            className={`whitespace-nowrap transition-all duration-300 origin-left
+              ${isCollapsed ? 'opacity-0 w-0 scale-0' : 'opacity-100 w-auto scale-100'}
+            `}
+          >
+            Logout
+          </span>
+        </button>
       </div>
+
     </aside>
   );
 };

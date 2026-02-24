@@ -1,6 +1,7 @@
 import os
 import certifi 
-from fastapi import FastAPI, HTTPException
+import shutil
+from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -8,11 +9,23 @@ from dotenv import load_dotenv
 from bson import ObjectId
 import uvicorn
 
-# ==========================================
-# 1. DATABASE CONNECTION
-# ==========================================
-load_dotenv()
+# --- LangChain & Pinecone Imports ---
+from pinecone import Pinecone
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_google_genai import GoogleGenerativeAIEmbeddings
+from langchain_pinecone import PineconeVectorStore
 
+# --- Agent Imports ---
+from app.agents.employee_agent import get_agent_response
+
+# Ensure policy data folder exists
+os.makedirs("data/policies", exist_ok=True)
+
+# ==========================================
+# 1. DATABASE CONNECTION (Robust SSL Setup)
+# ==========================================
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 
 print(f"🔌 Connecting to MongoDB...")
@@ -31,7 +44,7 @@ except Exception as e:
     print(f"❌ Critical DB Error: {e}")
 
 # ==========================================
-# 2. APP SETUP
+# 2. APP SETUP & CORS
 # ==========================================
 app = FastAPI(title="Innvoix HR Agent API")
 
@@ -44,7 +57,7 @@ app.add_middleware(
 )
 
 # ==========================================
-# 3. MODELS
+# 3. PYDANTIC MODELS
 # ==========================================
 class LoginRequest(BaseModel):
     email: str
@@ -55,18 +68,29 @@ class ChatRequest(BaseModel):
     message: str
     employee_id: str = "emp_001"
 
-def format_doc(doc):
-    if doc:
+class ApprovalAction(BaseModel):
+    status: str  # Frontend will send "APPROVED" or "REJECTED"
+
+# --- HELPER FUNCTION ---
+def format_mongo_doc(doc):
+    """Converts MongoDB ObjectId to a string for JSON serialization."""
+    if doc and "_id" in doc:
         doc["_id"] = str(doc["_id"])
     return doc
 
 # ==========================================
-# 4. AUTH ENDPOINT (LOGIN ONLY)
+# Root Endpoint
+# ==========================================
+@app.get("/")
+def read_root():
+    return {"status": "Active", "message": "Innvoix Backend is Connected and Running! 🚀"}
+
+# ==========================================
+# 4. AUTH & USER ENDPOINTS
 # ==========================================
 @app.post("/api/auth/login")
 async def login(request: LoginRequest):
     try:
-        # Search for user matching email AND password
         user_record = await db["users"].find_one({
             "email": request.email, 
             "password": request.password
@@ -78,7 +102,6 @@ async def login(request: LoginRequest):
     if not user_record:
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
-    # Strictly check if the user belongs to the portal they are trying to access
     if user_record.get("role") != request.role:
          raise HTTPException(status_code=403, detail=f"Access Denied: You are registered as '{user_record.get('role')}', not '{request.role}'")
 
@@ -89,9 +112,6 @@ async def login(request: LoginRequest):
         "role": user_record.get("role")
     }
 
-# ==========================================
-# 5. DATA ENDPOINTS
-# ==========================================
 @app.get("/api/users/{user_id}")
 async def get_user_profile(user_id: str):
     try:
@@ -109,8 +129,157 @@ async def get_user_profile(user_id: str):
             "sick_leaves_left": user.get("sick_leaves_left", 0)
         }
         return {"status": "success", "data": user_data}
-    except Exception as e:
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid User ID format")
 
+# ==========================================
+# 5. AGENTIC CHAT ENDPOINT
+# ==========================================
+@app.post("/chat")
+async def chat_endpoint(request: ChatRequest):
+    try:
+        print(f"📩 Chat Received from {request.employee_id}: {request.message}")
+        response = await get_agent_response(request.message, employee_id=request.employee_id)
+        print(f"📤 Agent Reply: {response}")
+        return {"response": response}
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ==========================================
+# 6. HR DASHBOARD GET ENDPOINTS
+# ==========================================
+@app.get("/api/employees")
+async def get_all_employees():
+    cursor = db.employees.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+@app.get("/api/tickets")
+async def get_all_tickets():
+    cursor = db.hr_tickets.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+@app.get("/api/leaves")
+async def get_leave_requests():
+    cursor = db.leave_requests.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+@app.get("/api/approvals")
+async def get_pending_approvals():
+    cursor = db.pending_approvals.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+@app.get("/api/policies/drafts")
+async def get_policy_drafts():
+    cursor = db.policy_drafts.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+# ==========================================
+# 7. HR DASHBOARD PUT ENDPOINTS (Approvals)
+# ==========================================
+@app.put("/api/approvals/{trx_id}")
+async def handle_approval(trx_id: str, action: ApprovalAction):
+    print(f"🛡️ HR Action: Marking {trx_id} as {action.status}")
+    if action.status == "APPROVED":
+        result = await db.pending_approvals.delete_one({"trx_id": trx_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Transaction not found.")
+        return {"status": "success", "message": f"Transaction {trx_id} approved and removed from queue."}
+    else:
+        await db.pending_approvals.update_one({"trx_id": trx_id}, {"$set": {"status": "REJECTED"}})
+        return {"status": "success", "message": f"Transaction {trx_id} rejected."}
+
+@app.put("/api/leaves/{req_id}")
+async def handle_leave_approval(req_id: str, action: ApprovalAction):
+    print(f"🛡️ HR Action: Marking Leave {req_id} as {action.status}")
+    if action.status == "APPROVED":
+        result = await db.leave_requests.delete_one({"req_id": req_id})
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="Leave request not found.")
+        return {"status": "success", "message": f"Leave {req_id} approved and cleared from dashboard."}
+    else:
+        await db.leave_requests.update_one({"req_id": req_id}, {"$set": {"status": "REJECTED"}})
+        return {"status": "success", "message": f"Leave {req_id} rejected."}
+
+# ==========================================
+# 8. POLICY DOCUMENT MANAGEMENT (Pinecone)
+# ==========================================
+@app.post("/api/policies/upload")
+async def upload_new_policy(file: UploadFile = File(...)):
+    print(f"📥 Received new policy document: {file.filename}")
+    file_path = f"data/policies/{file.filename}"
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    try:
+        print("📄 Loading and splitting document...")
+        loader = PyPDFLoader(file_path)
+        docs = loader.load()
+        
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
+        chunks = text_splitter.split_documents(docs)
+        
+        print(f"🧠 Embedding {len(chunks)} chunks into Pinecone Cloud...")
+        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+        index_name = os.getenv("PINECONE_INDEX_NAME")
+        
+        PineconeVectorStore.from_documents(
+            documents=chunks,
+            embedding=embeddings,
+            index_name=index_name
+        )
+        
+        await db.active_policies.insert_one({
+            "filename": file.filename,
+            "status": "Active Vectorized"
+        })
+        
+        return {"status": "success", "message": f"Policy '{file.filename}' successfully uploaded to Pinecone!"}
+
+    except Exception as e:
+        print(f"❌ Error vectorizing document: {str(e)}")
+        if os.path.exists(file_path):
+            os.remove(file_path)
+        raise HTTPException(status_code=500, detail=f"Failed to process PDF: {str(e)}")
+
+@app.get("/api/policies/active")
+async def get_active_policies():
+    cursor = db.active_policies.find()
+    docs = await cursor.to_list(length=100)
+    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+
+@app.delete("/api/policies/{policy_id}")
+async def delete_policy(policy_id: str):
+    print(f"🗑️ Deleting policy record: {policy_id}")
+    
+    policy_doc = await db.active_policies.find_one({"_id": ObjectId(policy_id)})
+    if not policy_doc:
+         raise HTTPException(status_code=404, detail="Policy not found in database.")
+         
+    filename = policy_doc["filename"]
+    file_path = f"data/policies/{filename}"
+
+    await db.active_policies.delete_one({"_id": ObjectId(policy_id)})
+    
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        print(f"Removed physical file: {file_path}")
+
+    try:
+        pc = Pinecone(api_key=os.getenv("PINECONE_API_KEY"))
+        index = pc.Index(os.getenv("PINECONE_INDEX_NAME"))
+        index.delete(filter={"source": file_path})
+        print(f"☁️ Purged all chunks for {filename} from Pinecone.")
+    except Exception as e:
+        print(f"⚠️ Warning: Could not purge from Pinecone: {str(e)}")
+
+    return {"status": "success", "message": f"Policy '{filename}' successfully deleted from the AI Knowledge Base."}
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
