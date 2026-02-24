@@ -18,6 +18,8 @@ langchain-google-genai>=2.0.0
 # Vector Database (Pinecone)
 pinecone-client
 
+pinecone
+langchain-pinecone
 
 # Document Processing
 pypdf
