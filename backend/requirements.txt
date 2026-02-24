@@ -6,6 +6,7 @@ uvicorn
 motor
 certifi
 python-multipart
+pymongo
 # AI & LangChain Ecosystem
 langgraph
 langchain-core
@@ -27,3 +28,9 @@ pypdf
 # Utilities
 python-dotenv
 pydantic
+
+# Google Calendar API Integration
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib
