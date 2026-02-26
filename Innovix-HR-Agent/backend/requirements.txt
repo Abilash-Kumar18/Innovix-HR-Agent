@@ -1,0 +1,36 @@
+# Web Framework
+fastapi
+uvicorn
+
+# Database (MongoDB)
+motor
+certifi
+python-multipart
+pymongo
+# AI & LangChain Ecosystem
+langgraph
+langchain-core
+langchain-community
+langchain
+
+langchain-pinecone>=0.1.1
+langchain-google-genai>=2.0.0
+
+# Vector Database (Pinecone)
+pinecone-client
+
+pinecone
+langchain-pinecone
+
+# Document Processing
+pypdf
+
+# Utilities
+python-dotenv
+pydantic
+
+# Google Calendar API Integration
+google-api-python-client
+google-auth
+google-auth-httplib2
+google-auth-oauthlib

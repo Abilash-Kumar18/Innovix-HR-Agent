@@ -1,0 +1,44 @@
+# =========================
+# BACKEND (Python / FastAPI)
+# =========================
+__pycache__/
+*.pyc
+*.pyo
+backend/.env
+backend/.venv/
+backend/.venv1/
+Frontend/.env
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================
+# OS & EDITORS
+# =========================
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+Frontend/.env
+
+backend/data/google_credentials.json
+google_credentials.json
+node_modules/
+dist/
+dist-ssr
+*.local
+Frontend/node_modules/
+node_modules/
+Frontend/dist/
+Frontend/dist-ssr
+Frontend/*.local
