@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // IMPORTANT: Keep this as localhost while testing on your machine!
-const API_URL = "http://localhost:8000"; 
+const API_URL = "https://innovix-hr-agent.onrender.com"; 
 
 export const api = axios.create({
   baseURL: API_URL,
