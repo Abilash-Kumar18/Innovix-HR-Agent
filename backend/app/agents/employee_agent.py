@@ -6,6 +6,7 @@ from langchain_core.messages import SystemMessage
 from langchain.agents import create_agent
 from datetime import datetime, timedelta
 
+
 # --- UPDATED IMPORTS ---
 from app.tools.search_tools import search_policy
 from app.tools.hr_tools import (
@@ -46,6 +47,7 @@ def clean_response(response_content):
 async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     global current_key_idx 
     
+        
     # --- 1. IDENTITY & ACCESS LOOKUP ---
     user_record = await db.employees.find_one({"employee_id": employee_id.lower()})
     

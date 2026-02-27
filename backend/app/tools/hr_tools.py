@@ -16,13 +16,7 @@ MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
 db = client.innvoix_hr # Creates a database called 'innvoix_hr'
 
-MOCK_HOLIDAYS = [
-    {"date": "2026-05-01", "name": "May Day"},
-    {"date": "2026-08-15", "name": "Independence Day"},
-    {"date": "2026-10-02", "name": "Gandhi Jayanti"},
-    {"date": "2026-10-14", "name": "Ayudha Pooja"},
-    {"date": "2026-11-08", "name": "Diwali"}
-]
+
 
 # --- GOOGLE CALENDAR AUTH SETUP ---
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
@@ -125,7 +119,8 @@ async def check_google_calendar_for_leaves(employee_id: str, target_month_num: i
         return calendar_summary
 
     except Exception as e:
-        return f"❌ Google Calendar API Error: {str(e)}"
+        print(f"❌ GOOGLE CALENDAR API ERROR: {str(e)}")
+        return "I'm sorry, I'm having trouble accessing the Google Calendar to check for upcoming holidays and your leave balance at the moment."
 
 
 # --- AUDIT LOGGING HELPER ---
