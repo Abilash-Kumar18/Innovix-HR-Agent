@@ -17,7 +17,6 @@ client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
 db = client.innvoix_hr # Creates a database called 'innvoix_hr'
 
 
-
 # --- GOOGLE CALENDAR AUTH SETUP ---
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
 SERVICE_ACCOUNT_FILE = 'data/google_credentials.json'

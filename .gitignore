@@ -30,7 +30,7 @@ pnpm-debug.log*
 *.sw?
 
 Frontend/.env
-
+backend/venv/
 backend/data/google_credentials.json
 google_credentials.json
 node_modules/

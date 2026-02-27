@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar'; 
 import { User, MapPin, Shield, BellRing, CheckCircle, FileText, Download, Clock, Send, ChevronRight, MessageSquare, Camera, X, Plus, AlertCircle, Bot, Calendar as CalendarIcon, Search, ChevronLeft, Phone, Mail, DollarSign } from 'lucide-react';
+// IMPORT YOUR API FUNCTIONS
+import { sendMessageToBackend, fetchUserProfile, fetchTickets, createTicket, fetchAllEmployees } from '../services/api';
 
 // --- DATA TYPES ---
 interface EmployeeData {
@@ -15,52 +17,41 @@ interface EmployeeData {
   leaves: { casual: number; sick: number; privilege: number; };
 }
 
-// --- SHARED DATA SERVICE ---
-const getLeaveRequests = () => {
-  const data = localStorage.getItem('leaveRequests');
-  return data ? JSON.parse(data) : [];
-};
-
-const sendLeaveRequest = (request: any) => {
-  const requests = getLeaveRequests();
-  const newRequest = { ...request, id: Date.now(), status: 'Pending', date: new Date().toLocaleDateString() };
-  localStorage.setItem('leaveRequests', JSON.stringify([newRequest, ...requests]));
-  return newRequest;
-};
-
-// --- 1. FULL PAGE AI CHAT COMPONENT ---
-const AIChatPage = () => {
+// --- 1. FULL PAGE AI CHAT COMPONENT (CONNECTED TO PYTHON) ---
+const AIChatPage = ({ userId }: { userId: string }) => {
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Payroll questions\n• Company holiday list\n\nHow can I help you today?' }
+    { id: 1, sender: 'ai', text: 'Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Applying for leave\n• Company policies\n\nHow can I help you today?' }
   ]);
   const [inputText, setInputText] = useState('');
+  const [loading, setLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
-  const handleSend = () => {
-    if (!inputText.trim()) return;
-    const newMsg = { id: Date.now(), sender: 'user', text: inputText };
-    setMessages(prev => [...prev, newMsg]);
-    setInputText('');
+  const handleSend = async () => {
+    if (!inputText.trim() || loading) return;
     
-    setTimeout(() => {
-      let reply = "I'm still learning, but I can help connect you with HR!";
-      const lowerInput = inputText.toLowerCase();
-      if (lowerInput.includes('leave') || lowerInput.includes('balance')) {
-        reply = "You currently have:\n• 4 Casual Leaves\n• 8 Sick Leaves\n• 15 Privilege Leaves";
-      } else if (lowerInput.includes('payroll')) {
-        reply = "Your latest payslip has been generated. The net amount is $4,250.00.";
-      }
-      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: reply }]);
-    }, 1000);
+    const userMsg = inputText;
+    setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: userMsg }]);
+    setInputText('');
+    setLoading(true); // Show typing indicator
+    
+    try {
+      // Send message to FastAPI Backend
+      const aiResponse = await sendMessageToBackend(userMsg, userId);
+      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: aiResponse }]);
+    } catch (error) {
+      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: "Sorry, my servers are currently offline." }]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in-up w-full">
       <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-white">
         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center text-white shadow-md shadow-lime-200"><Bot size={24} /></div>
-        <div><h2 className="text-xl font-bold text-slate-800">HR Assistant</h2><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-sm text-slate-500">Online • Replies instantly</span></div></div>
+        <div><h2 className="text-xl font-bold text-slate-800">HR Assistant</h2><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-sm text-slate-500">{loading ? 'Typing...' : 'Online • Powered by AI'}</span></div></div>
       </div>
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
         {messages.map((msg) => (
@@ -71,24 +62,23 @@ const AIChatPage = () => {
             </div>
           </div>
         ))}
+        {loading && <div className="text-sm text-slate-400 italic flex items-center gap-2"><div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div> Agent is thinking...</div>}
         <div ref={chatEndRef} />
       </div>
       <div className="p-6 bg-white border-t border-slate-100">
         <div className="flex gap-4 items-center bg-slate-50 p-2 rounded-full border border-slate-200 focus-within:border-lime-500 transition-all">
           <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type your question..." className="flex-1 bg-transparent px-4 py-2 text-slate-700 focus:outline-none" onKeyPress={(e) => e.key === 'Enter' && handleSend()}/>
-          <button onClick={handleSend} disabled={!inputText.trim()} className="w-10 h-10 bg-lime-500 hover:bg-lime-600 disabled:bg-slate-300 text-white rounded-full flex items-center justify-center transition-all shadow-md"><Send size={18} /></button>
+          <button onClick={handleSend} disabled={!inputText.trim() || loading} className="w-10 h-10 bg-lime-500 hover:bg-lime-600 disabled:bg-slate-300 text-white rounded-full flex items-center justify-center transition-all shadow-md"><Send size={18} /></button>
         </div>
       </div>
     </div>
   );
 };
 
-// --- 2. CALENDAR PAGE COMPONENT (UPDATED WITH POPUP ANIMATION) ---
+// --- 2. CALENDAR PAGE COMPONENT (No changes needed here yet) ---
 const CalendarPage = ({ setActivePage }: { setActivePage: (p: string) => void }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [searchDate, setSearchDate] = useState('');
-  
-  // State for animated popup modal
   const [selectedDayInfo, setSelectedDayInfo] = useState<{ day: number, event: any } | null>(null);
 
   const events = [
@@ -141,10 +131,8 @@ const CalendarPage = ({ setActivePage }: { setActivePage: (p: string) => void })
         <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"><h3 className="font-bold text-slate-800 mb-4">Schedule Key</h3><div className="space-y-3"><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-blue-500"></div> Meeting</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-orange-500"></div> Deadline</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-red-500"></div> Holiday</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-lime-500"></div> Available</div></div></div>
       </div>
 
-      {/* --- POPUP EVENT MODAL --- */}
       {selectedDayInfo && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          {/* Use CSS transform scale for a pop animation */}
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-[scale-in_0.3s_ease-out]">
             <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -187,14 +175,6 @@ const CalendarPage = ({ setActivePage }: { setActivePage: (p: string) => void })
           </div>
         </div>
       )}
-
-      {/* Keyframe for modal scale-in */}
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes scale-in {
-            0% { transform: scale(0.9); opacity: 0; }
-            100% { transform: scale(1); opacity: 1; }
-        }
-      `}} />
     </div>
   );
 };
@@ -209,9 +189,10 @@ const EditModal = ({ title, onClose, children }: any) => (
   </div>
 );
 
-// --- DASHBOARD OVERVIEW ---
+// --- 3. DASHBOARD OVERVIEW (CONNECTED) ---
 const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeData: EmployeeData | null, setActivePage: (p: string) => void }) => {
-  if (!employeeData) return <div className="p-10 text-slate-400">Loading Dashboard...</div>;
+  if (!employeeData) return <div className="p-10 text-slate-400 flex justify-center items-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lime-500"></div></div>;
+  
   return (
     <div className="space-y-6 w-full animate-fade-in-up">
       <div className="flex justify-between items-end">
@@ -231,7 +212,7 @@ const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeDa
             Hi, {employeeData.name.split(' ')[0]}! <span className="inline-block origin-[70%_70%] animate-[wave_2s_infinite]">👋</span>
           </h2>
           <p className="text-white/90 text-lg mb-6">
-            Ready for a great day? You have <span className="font-bold text-white bg-black/10 px-2 py-0.5 rounded">2 pending tasks</span> and your next leave starts in 4 days.
+            Ready for a great day? Keep up the good work!
           </p>
           <div className="flex gap-3">
              <button onClick={() => setActivePage('calendar')} className="bg-white text-green-600 px-5 py-2.5 rounded-xl font-bold shadow-md hover:scale-105 transition-transform flex items-center gap-2">
@@ -244,7 +225,7 @@ const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeDa
         </div>
 
         <div className="relative z-10 hidden md:block">
-           <img src="https://img.freepik.com/free-psd/3d-illustration-person-with-glasses_23-2149436185.jpg?size=626&ext=jpg" alt="Welcome Character" className="w-48 h-48 object-cover rounded-full border-4 border-white/30 shadow-2xl animate-[float_4s_ease-in-out_infinite]" />
+           <img src={employeeData.image} alt="Welcome Character" className="w-48 h-48 object-cover rounded-full border-4 border-white/30 shadow-2xl animate-[float_4s_ease-in-out_infinite]" />
            <div className="absolute -bottom-2 -left-4 bg-white p-2.5 rounded-2xl shadow-xl flex items-center gap-2 animate-[float_4s_ease-in-out_infinite_0.5s]">
               <div className="w-8 h-8 rounded-full bg-lime-100 flex items-center justify-center text-lime-600"><CheckCircle size={16} /></div>
               <div><p className="text-[10px] font-bold text-slate-400 uppercase">Status</p><p className="text-sm font-bold text-slate-800">Checked In</p></div>
@@ -260,36 +241,11 @@ const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeDa
           <div className="bg-white p-8 rounded-[2rem] border border-slate-100 shadow-sm text-center hover:shadow-md transition-all"><div className="w-20 h-20 mx-auto bg-gradient-to-b from-blue-300 to-blue-500 rounded-full mb-4 flex items-center justify-center text-white font-bold text-2xl pt-1">{employeeData.leaves.privilege}</div><h4 className="font-bold text-slate-700 text-lg">Privilege</h4><p className="text-sm text-slate-400">Days Left</p></div>
         </div>
       </div>
-      <div className="bg-white rounded-3xl p-8 border border-slate-100 shadow-sm">
-        <h3 className="text-lg font-bold text-slate-800 mb-6">Recent Activity</h3>
-        <div className="space-y-4">
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl"><div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center"><FileText size={20}/></div><div><h4 className="font-bold text-slate-700">Payslip Generated</h4><p className="text-xs text-slate-400">Oct 2025</p></div></div>
-          <div className="flex items-center gap-4 p-4 bg-slate-50 rounded-2xl"><div className="w-10 h-10 bg-green-100 text-green-600 rounded-full flex items-center justify-center"><CheckCircle size={20}/></div><div><h4 className="font-bold text-slate-700">Leave Approved</h4><p className="text-xs text-slate-400">Sick Leave (1 Day)</p></div></div>
-        </div>
-      </div>
-      
-      <style dangerouslySetInnerHTML={{__html: `
-        @keyframes wave {
-            0% { transform: rotate(0.0deg) }
-            10% { transform: rotate(14.0deg) }
-            20% { transform: rotate(-8.0deg) }
-            30% { transform: rotate(14.0deg) }
-            40% { transform: rotate(-4.0deg) }
-            50% { transform: rotate(10.0deg) }
-            60% { transform: rotate(0.0deg) }
-            100% { transform: rotate(0.0deg) }
-        }
-        @keyframes float {
-            0% { transform: translateY(0px) }
-            50% { transform: translateY(-10px) }
-            100% { transform: translateY(0px) }
-        }
-      `}} />
     </div>
   );
 };
 
-// 3. UPDATED NOTIFICATIONS PAGE
+// --- 4. UPDATED NOTIFICATIONS PAGE (REAL MONGODB DATA) ---
 const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null }) => {
   const [activeTab, setActiveTab] = useState('new');
   const [leaveType, setLeaveType] = useState('Casual Leave');
@@ -298,20 +254,43 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   const [reason, setReason] = useState('');
   const [myRequests, setMyRequests] = useState<any[]>([]);
 
+  // Fetch real tickets from DB
   useEffect(() => {
-    const allRequests = getLeaveRequests();
-    const empName = employeeData?.name || 'Alex Johnson';
-    setMyRequests(allRequests.filter((req: any) => req.employeeName === empName));
+    const loadTickets = async () => {
+      if (!employeeData) return;
+      try {
+        const response = await fetchTickets();
+        if (response.status === 'success') {
+           // Filter tickets only for THIS employee
+           const myTix = response.data.filter((req: any) => req.employee_id === employeeData.id);
+           setMyRequests(myTix);
+        }
+      } catch (err) { console.error("Error loading tickets:", err); }
+    };
+    if (activeTab === 'history') loadTickets();
   }, [activeTab, employeeData]);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!days || !reason || !startDate) {
-        alert("Please fill in all fields including the Start Date.");
-        return;
+    if (!days || !reason || !startDate) return alert("Please fill in all fields.");
+    if (!employeeData) return alert("User data not loaded.");
+
+    try {
+      // Create real ticket in MongoDB
+      await createTicket({
+        employee_id: employeeData.id,
+        employee_name: employeeData.name,
+        type: leaveType,
+        startDate: startDate,
+        days: days,
+        reason: reason,
+        role: employeeData.role
+      });
+      alert("Request Sent to HR!"); 
+      setDays(''); setReason(''); setStartDate(''); setActiveTab('history');
+    } catch(err) {
+      alert("Failed to send request. Is backend running?");
     }
-    sendLeaveRequest({ employeeName: employeeData?.name || 'Alex Johnson', role: employeeData?.role || 'Employee', type: leaveType, startDate: startDate, days: days, reason: reason });
-    alert("Request Sent to HR!"); setDays(''); setReason(''); setStartDate(''); setActiveTab('history');
   };
 
   return (
@@ -343,7 +322,7 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
             {activeTab === 'history' && (
                 <div className="space-y-4">
                 {myRequests.length === 0 ? <div className="text-center py-10 text-slate-400">No requests found.</div> : myRequests.map((req) => (
-                    <div key={req.id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 w-full">
+                    <div key={req._id} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4 w-full">
                         <div className={`w-12 h-12 rounded-full flex items-center justify-center shrink-0 ${req.status === 'Approved' ? 'bg-green-100 text-green-600' : req.status === 'Rejected' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>{req.status === 'Approved' ? <CheckCircle size={20}/> : req.status === 'Rejected' ? <AlertCircle size={20}/> : <Clock size={20}/>}</div>
                         <div className="flex-1"><div className="flex justify-between"><h4 className="font-bold text-slate-800">{req.type} ({req.days} days)</h4><span className="text-xs text-slate-400">{req.date}</span></div><p className="text-xs text-slate-500 font-medium mt-1">Requested Start Date: {req.startDate || 'N/A'}</p><p className="text-sm text-slate-500 mt-1">Reason: {req.reason}</p><p className={`text-xs font-bold mt-2 ${req.status === 'Approved' ? 'text-green-600' : req.status === 'Rejected' ? 'text-red-600' : 'text-orange-500'}`}>Status: {req.status}</p></div>
                     </div>
@@ -356,14 +335,25 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   );
 };
 
-// --- 4. UPDATED MY TEAM PAGE (ANIMATED DIRECTORY) ---
-const MyTeam = () => {
-  const teamMembers = [
-    { name: "Sarah Jones", role: "Product Manager", status: "Online", img: "https://i.pravatar.cc/150?img=32", email: "sarah.j@innvoix.com" },
-    { name: "Michael Chen", role: "Backend Developer", status: "In a Meeting", img: "https://i.pravatar.cc/150?img=11", email: "mike.c@innvoix.com" },
-    { name: "Emily Davis", role: "UI/UX Designer", status: "Online", img: "https://i.pravatar.cc/150?img=5", email: "emily.d@innvoix.com" },
-    { name: "David Wilson", role: "QA Engineer", status: "On Leave", img: "https://i.pravatar.cc/150?img=14", email: "david.w@innvoix.com" },
-  ];
+// --- 5. UPDATED MY TEAM PAGE (REAL MONGODB DATA) ---
+const MyTeam = ({ currentUserId }: { currentUserId: string }) => {
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchTeam = async () => {
+      try {
+        const response = await fetchAllEmployees();
+        if (response.status === 'success') {
+          // Filter to only show 'employees' and exclude the currently logged in user
+          const colleagues = response.data.filter((u: any) => u.role === 'employee' && u._id !== currentUserId);
+          setTeamMembers(colleagues);
+        }
+      } catch (error) {
+        console.error("Failed to fetch team:", error);
+      }
+    };
+    fetchTeam();
+  }, [currentUserId]);
 
   return (
     <div className="w-full space-y-6 animate-fade-in-up">
@@ -376,19 +366,14 @@ const MyTeam = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {teamMembers.map((member, idx) => (
-          <div 
-            key={idx} 
-            className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-center hover:shadow-lg hover:-translate-y-2 transition-all duration-300"
-            style={{ animationDelay: `${idx * 100}ms` }} 
-          >
+          <div key={idx} className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 text-center hover:shadow-lg hover:-translate-y-2 transition-all duration-300" style={{ animationDelay: `${idx * 100}ms` }}>
             <div className="relative inline-block mb-4">
-               <img src={member.img} alt={member.name} className="w-24 h-24 rounded-full object-cover border-4 border-slate-50 shadow-sm mx-auto"/>
-               <div className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white 
-                 ${member.status === 'Online' ? 'bg-green-500' : member.status === 'In a Meeting' ? 'bg-orange-500' : 'bg-slate-400'}`}>
-               </div>
+               {/* Use auto-generated initials image if no profile pic exists */}
+               <img src={localStorage.getItem(`profile_pic_${member._id}`) || `https://ui-avatars.com/api/?name=${member.name}&background=random`} alt={member.name} className="w-24 h-24 rounded-full object-cover border-4 border-slate-50 shadow-sm mx-auto"/>
+               <div className={`absolute bottom-1 right-1 w-4 h-4 rounded-full border-2 border-white bg-green-500`}></div>
             </div>
             <h3 className="font-bold text-slate-800 text-lg">{member.name}</h3>
-            <p className="text-lime-600 font-medium text-sm mb-4">{member.role}</p>
+            <p className="text-lime-600 font-medium text-sm mb-4">{member.department}</p>
             
             <div className="flex items-center justify-center gap-2 text-xs text-slate-500 bg-slate-50 py-2 rounded-lg mb-4">
               <Mail size={14}/> {member.email}
@@ -400,12 +385,13 @@ const MyTeam = () => {
             </div>
           </div>
         ))}
+        {teamMembers.length === 0 && <p className="col-span-4 text-center text-slate-500 py-10">No team members found in database.</p>}
       </div>
     </div>
   );
 };
 
-// --- 5. UPDATED PAYSLIPS PAGE (DETAILED SALARY BREAKDOWN) ---
+// --- 6. PAYSLIPS PAGE (No API changes needed for now) ---
 const EmployeePayslips = () => {
   return (
     <div className="w-full space-y-6 animate-fade-in-up">
@@ -420,7 +406,6 @@ const EmployeePayslips = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Main Summary Card */}
         <div className="lg:col-span-1 bg-slate-900 text-white p-8 rounded-3xl shadow-xl relative overflow-hidden flex flex-col justify-center min-h-[300px]">
           <div className="absolute -right-10 -bottom-10 w-40 h-40 bg-lime-500 opacity-20 rounded-full blur-2xl"></div>
           <div className="relative z-10 text-center">
@@ -432,11 +417,7 @@ const EmployeePayslips = () => {
             <span className="inline-block bg-green-500/20 text-green-400 text-xs font-bold px-3 py-1 rounded-full border border-green-500/30 mt-2">Paid on Oct 31</span>
           </div>
         </div>
-
-        {/* Detailed Breakdown */}
         <div className="lg:col-span-2 bg-white rounded-3xl p-8 border border-slate-100 shadow-sm flex flex-col md:flex-row gap-8">
-           
-           {/* Earnings */}
            <div className="flex-1 space-y-4">
              <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3"><Plus size={18} className="text-green-500"/> Earnings</h3>
              <div className="flex justify-between text-sm"><span className="text-slate-500">Basic Salary</span><span className="font-bold text-slate-800">$3,500.00</span></div>
@@ -444,15 +425,12 @@ const EmployeePayslips = () => {
              <div className="flex justify-between text-sm"><span className="text-slate-500">Special Allowance</span><span className="font-bold text-slate-800">$450.00</span></div>
              <div className="flex justify-between text-sm pt-3 border-t border-slate-50"><span className="font-bold text-slate-800">Gross Earnings</span><span className="font-bold text-green-600">$4,750.00</span></div>
            </div>
-
-           {/* Deductions */}
            <div className="flex-1 space-y-4">
              <h3 className="font-bold text-slate-800 flex items-center gap-2 border-b border-slate-100 pb-3"><X size={18} className="text-red-500"/> Deductions</h3>
              <div className="flex justify-between text-sm"><span className="text-slate-500">Income Tax (TDS)</span><span className="font-bold text-slate-800">$350.00</span></div>
              <div className="flex justify-between text-sm"><span className="text-slate-500">Provident Fund (PF)</span><span className="font-bold text-slate-800">$150.00</span></div>
              <div className="flex justify-between text-sm pt-3 border-t border-slate-50"><span className="font-bold text-slate-800">Total Deductions</span><span className="font-bold text-red-500">$500.00</span></div>
            </div>
-
         </div>
       </div>
     </div>
@@ -460,7 +438,7 @@ const EmployeePayslips = () => {
 };
 
 
-// 6. UPDATED PROFILE WITH EDITABLE PHONE
+// --- 7. UPDATED PROFILE WITH EDITABLE IMAGE VIA LOCALSTORAGE ---
 const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, onImageChange: any }) => {
   if (!data) return <div>Loading...</div>;
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -489,13 +467,13 @@ const EmployeeProfile = ({ data, onImageChange }: { data: EmployeeData | null, o
         </div>
         <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-100"><h3 className="font-bold text-slate-800 mb-6 flex items-center gap-2 text-lg"><Shield size={20} className="text-lime-600"/> Settings</h3><div className="space-y-6"><div className="flex justify-between items-center border-b border-slate-50 pb-4"><div><label className="text-xs text-slate-400 uppercase font-bold tracking-wider">Password</label><p className="font-medium text-slate-700 mt-1">••••••••••••</p></div><button onClick={() => setActiveModal('password')} className="text-lime-600 text-sm font-bold hover:underline">Update</button></div><div className="flex justify-between items-center"><div><label className="text-xs text-slate-400 uppercase font-bold tracking-wider">Notifications</label><p className="font-medium text-slate-500 mt-1 text-sm">Email & Slack</p></div><button onClick={() => setActiveModal('notifications')} className="text-slate-400 text-sm font-bold hover:text-lime-600">Edit</button></div></div></div>
       </div>
-      {activeModal === 'password' && (<EditModal title="Update Password" onClose={() => setActiveModal('none')}><div className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div><div><label className="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div><button onClick={handleSave} className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-slate-800">Update Password</button></div></EditModal>)}
+      {activeModal === 'password' && (<EditModal title="Update Password" onClose={() => setActiveModal('none')}><div className="space-y-4"><div><label className="block text-sm font-medium text-slate-700 mb-1">Current Password</label><input type="password" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div><div><label className="block text-sm font-medium text-slate-700 mb-1">New Password</label><input type="password" className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:border-lime-500 outline-none"/></div><button onClick={handleSave} className="w-full bg-slate-900 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-slate-800">Update Password</button></div></EditModal>)}
       {activeModal === 'notifications' && (<EditModal title="Notification Preferences" onClose={() => setActiveModal('none')}><div className="space-y-4">{['Email Notifications', 'Slack Alerts', 'Browser Push', 'SMS Alerts'].map(opt => (<label key={opt} className="flex items-center gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 cursor-pointer"><input type="checkbox" defaultChecked className="w-4 h-4 text-lime-500 rounded focus:ring-lime-500"/><span className="text-sm font-medium text-slate-700">{opt}</span></label>))}<button onClick={handleSave} className="w-full bg-lime-500 text-white py-2.5 rounded-lg font-bold text-sm hover:bg-lime-600 shadow-lg shadow-lime-200">Save Preferences</button></div></EditModal>)}
     </div>
   );
 };
 
-// 7. MAIN DASHBOARD COMPONENT
+// --- 8. MAIN DASHBOARD COMPONENT (REAL API DATA) ---
 interface EmployeeDashboardProps { onLogout: () => void; }
 
 const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
@@ -503,37 +481,59 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
 
+  // FETCH REAL DATA ON LOAD
   useEffect(() => {
-    // Simulating Real API Call
-    setTimeout(() => {
-      setEmployeeData({
-        id: "EMP-2025-042",
-        name: "Alex Johnson",
-        role: "Senior Frontend Developer",
-        department: "Engineering",
-        email: "alex.johnson@innvoix.com",
-        phone: "+1 (555) 987-6543",
-        location: "San Francisco, CA",
-        image: "https://i.pravatar.cc/150?img=12",
-        leaves: { casual: 4, sick: 8, privilege: 15 }
-      });
-    }, 500);
+    const loadData = async () => {
+      const userId = localStorage.getItem('current_user_id');
+      if (userId) {
+        try {
+          const res = await fetchUserProfile(userId);
+          if (res.status === 'success') {
+            // Get custom image or generate one based on Name
+            const savedImage = localStorage.getItem(`profile_pic_${res.data.id}`);
+            const generatedAvatar = `https://ui-avatars.com/api/?name=${res.data.name}&background=84cc16&color=fff&size=150`;
+
+            setEmployeeData({
+              id: res.data.id,
+              name: res.data.name,
+              role: res.data.role,
+              department: res.data.department,
+              email: res.data.email,
+              phone: "Not Set",
+              location: "Remote",
+              image: savedImage || generatedAvatar, 
+              leaves: { casual: res.data.casual_leaves_left, sick: res.data.sick_leaves_left, privilege: 15 }
+            });
+          }
+        } catch (error) {
+          console.error("Failed to load user profile:", error);
+        }
+      }
+    };
+    loadData();
   }, []);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
+    if (e.target.files && e.target.files[0] && employeeData) {
       const file = e.target.files[0];
-      const imageUrl = URL.createObjectURL(file);
-      setEmployeeData(prev => prev ? { ...prev, image: imageUrl } : null);
+      const reader = new FileReader();
+      
+      // Convert image to Base64 and save to localStorage to persist across reloads
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        localStorage.setItem(`profile_pic_${employeeData.id}`, base64String);
+        setEmployeeData({ ...employeeData, image: base64String });
+      };
+      reader.readAsDataURL(file);
     }
   };
 
   const renderContent = () => {
     switch(activePage) {
       case 'dashboard': return <EmployeeDashboardOverview employeeData={employeeData} setActivePage={setActivePage} />;
-      case 'chat': return <AIChatPage />; 
+      case 'chat': return <AIChatPage userId={employeeData?.id || 'emp_001'} />; 
       case 'calendar': return <CalendarPage setActivePage={setActivePage} />; 
-      case 'employees': return <MyTeam />;
+      case 'employees': return <MyTeam currentUserId={employeeData?.id || ''} />;
       case 'payroll': return <EmployeePayslips />;
       case 'notifications': return <NotificationsPage employeeData={employeeData} />; 
       case 'profile': return <EmployeeProfile data={employeeData} onImageChange={handleImageChange} />;
@@ -544,7 +544,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   return (
     <div className="flex min-h-screen bg-[#F8F9FA] font-sans text-slate-900 relative">
       
-      {/* Sidebar */}
       <Sidebar 
         activePage={activePage} 
         setActivePage={setActivePage} 
@@ -555,17 +554,14 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
         toggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
       
-      {/* Main Content */}
       <main className={`flex-1 p-8 transition-all duration-300 w-full ${isSidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
         
-        {/* Header - No Chat Icon */}
         <header className="mb-8 flex justify-between items-center w-full">
           <h1 className="text-2xl font-bold text-slate-400 capitalize tracking-tight">
             {activePage === 'dashboard' ? 'Overview' : activePage.replace('-', ' ')}
           </h1>
           
           <div className="flex items-center gap-4">
-             {/* Notification & User Profile Here */}
              <button className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-200 text-slate-500 hover:text-lime-600 transition-all relative" onClick={() => setActivePage('notifications')}>
                <BellRing size={20} />
              </button>
@@ -576,7 +572,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
                 <p className="text-xs text-slate-400">{employeeData?.role || '...'}</p>
              </div>
              <img 
-               src={employeeData?.image || "https://via.placeholder.com/150"} 
+               src={employeeData?.image || "https://ui-avatars.com/api/?name=User&background=84cc16&color=fff"} 
                className="w-10 h-10 rounded-full border-2 border-white shadow-sm cursor-pointer object-cover bg-slate-200" 
                onClick={() => setActivePage('profile')} 
                alt="profile"
@@ -584,7 +580,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
           </div>
         </header>
 
-        {/* Content Wrapper */}
         <div className="animate-fade-in-up w-full">
            {renderContent()}
         </div>

@@ -15,7 +15,6 @@ langchain
 
 langchain-pinecone>=0.1.1
 langchain-google-genai>=2.0.0
-nemoguardrails
 
 # Vector Database (Pinecone)
 pinecone-client

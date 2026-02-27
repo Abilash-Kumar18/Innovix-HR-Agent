@@ -1,6 +1,7 @@
 import os
 import certifi 
 import shutil
+import datetime
 from fastapi import FastAPI, HTTPException, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -57,7 +58,7 @@ app.add_middleware(
 )
 
 # ==========================================
-# 3. PYDANTIC MODELS
+# 3. PYDANTIC MODELS (Merged)
 # ==========================================
 class LoginRequest(BaseModel):
     email: str
@@ -70,6 +71,18 @@ class ChatRequest(BaseModel):
 
 class ApprovalAction(BaseModel):
     status: str  # Frontend will send "APPROVED" or "REJECTED"
+
+class TicketCreate(BaseModel):
+    employee_id: str
+    employee_name: str
+    type: str
+    startDate: str
+    days: str
+    reason: str
+    role: str = "employee"
+
+class TicketUpdate(BaseModel):
+    status: str
 
 # --- HELPER FUNCTION ---
 def format_mongo_doc(doc):
@@ -132,6 +145,15 @@ async def get_user_profile(user_id: str):
     except Exception:
         raise HTTPException(status_code=400, detail="Invalid User ID format")
 
+@app.get("/api/employees")
+async def get_all_employees():
+    """Updated by Dharani: Returns only standard employees."""
+    try:
+        docs = await db["users"].find({"role": "employee"}).to_list(100)
+        return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+    except Exception:
+        return {"status": "error", "data": []}
+
 # ==========================================
 # 5. AGENTIC CHAT ENDPOINT
 # ==========================================
@@ -143,24 +165,40 @@ async def chat_endpoint(request: ChatRequest):
         print(f"📤 Agent Reply: {response}")
         return {"response": response}
     except Exception as e:
-        print(f"❌ Error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        print(f"❌ Agent Error: {e}")
+        # Dharani's fix: Returns a string to the frontend instead of crashing
+        return {"response": f"Sorry, my AI brain encountered an error: {str(e)}"}
 
 # ==========================================
-# 6. HR DASHBOARD GET ENDPOINTS
+# 6. TICKETS ENDPOINTS (Dharani's Updates)
 # ==========================================
-@app.get("/api/employees")
-async def get_all_employees():
-    cursor = db.employees.find()
-    docs = await cursor.to_list(length=100)
-    return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
+@app.post("/api/tickets")
+async def create_new_ticket(ticket: TicketCreate):
+    new_ticket = ticket.model_dump()
+    new_ticket["status"] = "Pending"
+    new_ticket["date"] = datetime.datetime.now().strftime("%m/%d/%Y")
+    await db["tickets"].insert_one(new_ticket)
+    return {"status": "success", "message": "Ticket created"}
 
 @app.get("/api/tickets")
 async def get_all_tickets():
-    cursor = db.hr_tickets.find()
-    docs = await cursor.to_list(length=100)
+    docs = await db["tickets"].find().sort("date", -1).to_list(100)
     return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
 
+@app.put("/api/tickets/{ticket_id}")
+async def update_ticket_status(ticket_id: str, status_update: TicketUpdate):
+    try:
+        await db["tickets"].update_one(
+            {"_id": ObjectId(ticket_id)}, 
+            {"$set": {"status": status_update.status}}
+        )
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="Failed to update ticket")
+
+# ==========================================
+# 7. HR DASHBOARD GET ENDPOINTS (Devaroopa's Data)
+# ==========================================
 @app.get("/api/leaves")
 async def get_leave_requests():
     cursor = db.leave_requests.find()
@@ -180,7 +218,7 @@ async def get_policy_drafts():
     return {"status": "success", "data": [format_mongo_doc(doc) for doc in docs]}
 
 # ==========================================
-# 7. HR DASHBOARD PUT ENDPOINTS (Approvals)
+# 8. HR DASHBOARD PUT ENDPOINTS (Approvals)
 # ==========================================
 @app.put("/api/approvals/{trx_id}")
 async def handle_approval(trx_id: str, action: ApprovalAction):
@@ -207,7 +245,7 @@ async def handle_leave_approval(req_id: str, action: ApprovalAction):
         return {"status": "success", "message": f"Leave {req_id} rejected."}
 
 # ==========================================
-# 8. POLICY DOCUMENT MANAGEMENT (Pinecone)
+# 9. POLICY DOCUMENT MANAGEMENT (Pinecone)
 # ==========================================
 @app.post("/api/policies/upload")
 async def upload_new_policy(file: UploadFile = File(...)):

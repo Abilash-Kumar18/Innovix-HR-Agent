@@ -6,7 +6,6 @@ from langchain_core.messages import SystemMessage
 from langchain.agents import create_agent
 from datetime import datetime, timedelta
 
-
 # --- UPDATED IMPORTS ---
 from app.tools.search_tools import search_policy
 from app.tools.hr_tools import (
