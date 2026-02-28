@@ -16,6 +16,8 @@ from langchain_community.document_loaders import PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
+import base64
+from fastapi.responses import Response
 
 # --- Agent Imports ---
 from app.agents.employee_agent import get_agent_response
@@ -264,7 +266,12 @@ async def upload_new_policy(file: UploadFile = File(...)):
         chunks = text_splitter.split_documents(docs)
         
         print(f"🧠 Embedding {len(chunks)} chunks into Pinecone Cloud...")
-        embeddings = GoogleGenerativeAIEmbeddings(model="gemini-embedding-001")
+        # Force it to use your specific key variable and correct model name
+        google_key = os.getenv("GEMINI_KEY_1") or os.getenv("GOOGLE_API_KEY")
+        embeddings = GoogleGenerativeAIEmbeddings(
+            model="gemini-embedding-001",
+            google_api_key=google_key
+        )
         index_name = os.getenv("PINECONE_INDEX_NAME")
         
         PineconeVectorStore.from_documents(
@@ -273,9 +280,14 @@ async def upload_new_policy(file: UploadFile = File(...)):
             index_name=index_name
         )
         
+        # --- NEW CODE: Convert PDF to Base64 to store in MongoDB ---
+        with open(file_path, "rb") as pdf_file:
+            encoded_string = base64.b64encode(pdf_file.read()).decode('utf-8')
+            
         await db.active_policies.insert_one({
             "filename": file.filename,
-            "status": "Active Vectorized"
+            "status": "Active Vectorized",
+            "file_data": encoded_string  # <-- The physical file is now in the DB!
         })
         
         return {"status": "success", "message": f"Policy '{file.filename}' successfully uploaded to Pinecone!"}
@@ -318,6 +330,29 @@ async def delete_policy(policy_id: str):
         print(f"⚠️ Warning: Could not purge from Pinecone: {str(e)}")
 
     return {"status": "success", "message": f"Policy '{filename}' successfully deleted from the AI Knowledge Base."}
+
+# ==========================================
+# 10. POLICY PDF DOWNLOAD ENDPOINT
+# ==========================================
+@app.get("/api/policies/download/{policy_id}")
+async def download_policy(policy_id: str):
+    """Fetches the Base64 PDF string from MongoDB and serves it as a downloadable file."""
+    print(f"📥 Fetching PDF download for policy: {policy_id}")
+    
+    policy_doc = await db.active_policies.find_one({"_id": ObjectId(policy_id)})
+    
+    if not policy_doc or "file_data" not in policy_doc:
+         raise HTTPException(status_code=404, detail="PDF data not found in database.")
+         
+    # Decode the Base64 string back into raw PDF bytes
+    pdf_bytes = base64.b64decode(policy_doc["file_data"])
+    
+    # Serve it to the frontend as a real file!
+    return Response(
+        content=pdf_bytes, 
+        media_type="application/pdf", 
+        headers={"Content-Disposition": f"attachment; filename={policy_doc['filename']}"}
+    )
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

@@ -45,7 +45,8 @@ def clean_response(response_content):
 
 async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     global current_key_idx 
-    
+    if not user_message or not user_message.strip():
+        return "Please type a valid message."
         
     # --- 1. IDENTITY & ACCESS LOOKUP ---
     user_record = await db.employees.find_one({"employee_id": employee_id.lower()})
@@ -53,7 +54,11 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     if user_record:
         user_name = user_record.get("name", "Unknown")
         user_department = user_record.get("department", "Employee")
-        is_hr_admin = user_department.lower() == "hr" or user_department.lower() == "human resources"
+        
+        # FIX: Use 'in' to catch variations like "HR Admin", "HR Department", etc.
+        dep_lower = user_department.lower()
+        is_hr_admin = "hr" in dep_lower or "human resources" in dep_lower
+        
         role_title = "HR Administrator" if is_hr_admin else f"{user_department} Employee"
     else:
         user_name = "Guest"
@@ -100,7 +105,7 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
     
     if session_record:
         db_history = session_record.get("history", [])
-        formatted_memory = [(msg["role"], msg["content"]) for msg in db_history]
+        formatted_memory = [(msg["role"], msg["content"]) for msg in db_history if msg.get("content", "").strip()]
     else:
         db_history = []
         formatted_memory = []
@@ -148,7 +153,7 @@ async def run_interactive_chat():
     while True:
         user_text = input("You: ")
         
-        if user_text.lower() in ['exit', 'quit']:
+        if user_text.lower() in ['exit', 'quit', 'bye']:
             print("Shutting down Agent...")
             break
             

@@ -14,12 +14,15 @@ load_dotenv()
 # --- MONGODB CONNECTION ---
 MONGO_URI = os.getenv("MONGO_URI", "mongodb://localhost:27017")
 client = AsyncIOMotorClient(MONGO_URI, tlsCAFile=certifi.where())
-db = client.innvoix_hr # Creates a database called 'innvoix_hr'
-
+db = client.innvoix_hr 
 
 # --- GOOGLE CALENDAR AUTH SETUP ---
 SCOPES = ['https://www.googleapis.com/auth/calendar.readonly']
-SERVICE_ACCOUNT_FILE = 'data/google_credentials.json'
+
+# Dynamically builds the absolute path: tools -> app -> backend -> data -> google_credentials.json
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+BACKEND_DIR = os.path.dirname(os.path.dirname(CURRENT_DIR))
+SERVICE_ACCOUNT_FILE = os.path.join(BACKEND_DIR, 'data', 'google_credentials.json')
 
 def get_calendar_service():
     """Authenticates with Google Cloud using the Service Account JSON."""
@@ -29,10 +32,8 @@ def get_calendar_service():
 
 def send_leave_email_to_hr(employee_name: str, start_date: str, end_date: str, reason: str):
     """Sends an automated email to the HR department."""
-    
-    # You will need to add these 3 variables to your .env file!
     sender_email = os.getenv("SENDER_EMAIL") 
-    sender_password = os.getenv("SENDER_PASSWORD") # This must be a Gmail App Password
+    sender_password = os.getenv("SENDER_PASSWORD")
     hr_email = os.getenv("HR_EMAIL", "hr@innvoix.com")
     
     if not sender_email or not sender_password:
@@ -54,7 +55,6 @@ def send_leave_email_to_hr(employee_name: str, start_date: str, end_date: str, r
     msg['To'] = hr_email
 
     try:
-        # Securely connect to Gmail's server and send the email
         with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
             smtp.login(sender_email, sender_password)
             smtp.send_message(msg)
@@ -68,9 +68,17 @@ async def check_google_calendar_for_leaves(employee_id: str, target_month_num: i
     Useful for checking REAL Google Calendar holidays to suggest vacation days.
     Input requires the employee_id, target_month_num (1-12), and target_year.
     """
+    try:
+        target_month_num = int(target_month_num)
+        target_year = int(target_year)
+    except ValueError:
+        return "I need a valid numerical month and year to check the calendar."
+        
+    if not (1 <= target_month_num <= 12):
+        return "I can only check calendar events for valid months (1 through 12). Please specify a real month."
+
     print(f"🛠️ TOOL CALLED: Fetching live Google Calendar for month {target_month_num}")
     
-    # 1. Check Employee Leave Balance
     emp = await db.employees.find_one({"employee_id": employee_id.lower()})
     if not emp:
         return "Error: Employee not found."
@@ -79,17 +87,12 @@ async def check_google_calendar_for_leaves(employee_id: str, target_month_num: i
     if leaves_left <= 0:
         return "You have 0 casual leaves remaining. I cannot suggest a vacation."
 
-   # 2. Setup Date Ranges for the Google API
-    # Start of the month
     time_min = datetime(target_year, target_month_num, 1, 0, 0, 0).isoformat() + 'Z' 
-    # End of the month
     if target_month_num == 12:
         time_max = datetime(target_year + 1, 1, 1, 0, 0, 0).isoformat() + 'Z'
     else:
         time_max = datetime(target_year, target_month_num + 1, 1, 0, 0, 0).isoformat() + 'Z'
 
-
-    # 3. Call the actual Google Calendar API
     try:
         service = get_calendar_service()
         calendar_id = os.getenv("GOOGLE_CALENDAR_ID")
@@ -107,7 +110,6 @@ async def check_google_calendar_for_leaves(employee_id: str, target_month_num: i
         if not holidays:
             return f"You have {leaves_left} leaves, but there are no official company holidays listed in Google Calendar for month {target_month_num}."
             
-        # 4. Format the output so LangGraph can read it and do the math
         calendar_summary = f"You have {leaves_left} casual leaves left.\n\nHere are the live events from the Google Calendar:\n"
         for event in holidays:
             start = event['start'].get('dateTime', event['start'].get('date'))
@@ -120,7 +122,6 @@ async def check_google_calendar_for_leaves(employee_id: str, target_month_num: i
     except Exception as e:
         print(f"❌ GOOGLE CALENDAR API ERROR: {str(e)}")
         return "I'm sorry, I'm having trouble accessing the Google Calendar to check for upcoming holidays and your leave balance at the moment."
-
 
 # --- AUDIT LOGGING HELPER ---
 async def log_audit_action(action_name: str, details: str):
@@ -136,22 +137,20 @@ async def log_audit_action(action_name: str, details: str):
 async def get_employee_details(employee_id_or_name: str) -> str:
     """
     Useful to find an employee's leave balance, role, or personal details. 
-    Input can be their exact employee ID (e.g., 'emp_001') OR their Name (e.g., 'Abilash').
+    Input can be their exact employee ID (e.g., 'emp_001') OR their Name.
     """
+    if not isinstance(employee_id_or_name, str) or not employee_id_or_name.strip():
+        return "Please provide a valid employee name or ID."
+
     print(f"🛠️ TOOL CALLED: Fetching DB details for {employee_id_or_name}")
     
-    # 1. Try finding by exact employee_id first
     emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
-    
-    # 2. If not found by ID, search by Name (case-insensitive partial match)
     if not emp:
         emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
         
     if emp:
-        # --- ADDED SALARY TO THE RETURN STRING ---
         return f"ID: {emp.get('employee_id')}, Name: {emp['name']}, Role: {emp['role']}, Salary: ${emp.get('salary', 'N/A')}, Casual Leaves: {emp.get('casual_leaves_left', 0)}, Sick Leaves: {emp.get('sick_leaves_left', 0)}"
     return f"Employee '{employee_id_or_name}' not found."
-
 
 @tool
 async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: str, reason: str) -> str:
@@ -159,9 +158,11 @@ async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: s
     Submits a leave request for the employee to HR. 
     MUST include the start_date, end_date, and the specific reason for the leave.
     """
+    if not isinstance(employee_id_or_name, str) or not employee_id_or_name.strip():
+        return "Please provide a valid employee name or ID."
+
     print(f"🛠️ TOOL CALLED: Applying for leave for {employee_id_or_name} from {start_date} to {end_date}")
     
-    # Smart lookup
     emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
     if not emp:
         emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
@@ -172,7 +173,6 @@ async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: s
     actual_emp_id = emp["employee_id"]
     emp_name = emp["name"]
     
-    # Insert the request (WITH the reason) into the HR Approvals database
     leave_request = {
         "emp_id": actual_emp_id,
         "employee_name": emp_name,
@@ -183,60 +183,15 @@ async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: s
     }
     await db.leaves.insert_one(leave_request)
     
-    # Trigger the real-world email alert!
     send_leave_email_to_hr(emp_name, start_date, end_date, reason)
     
     return f"SUCCESS: Leave request for {start_date} to {end_date} submitted. HR has been notified via email and will review your reason: '{reason}'."
-    """
-    Useful to apply for leave. 
-    Input 'employee_id_or_name' can be the ID or Name, 'leave_type' ('casual' or 'sick'), and 'days'.
-    """
-    print(f"🛠️ TOOL CALLED: Applying {days} days of {leave_type} leave for {employee_id_or_name}")
-    
-    # Smart lookup: Try ID first, then fallback to Name
-    emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
-    if not emp:
-        emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
-        
-    if not emp: 
-        return f"Cannot apply: Employee '{employee_id_or_name}' not found."
-    
-    # Ensure we use their actual ID for the database records, even if a name was passed
-    actual_emp_id = emp["employee_id"]
-    
-    balance_key = f"{leave_type.lower()}_leaves_left"
-    if balance_key not in emp: 
-        return "Invalid leave type. Must be 'casual' or 'sick'."
-        
-    if emp[balance_key] >= int(days):
-        new_balance = emp[balance_key] - int(days)
-        
-        # Update the balance using their actual ID
-        await db.employees.update_one(
-            {"employee_id": actual_emp_id}, 
-            {"$set": {balance_key: new_balance}}
-        )
-        count = await db.leave_requests.count_documents({})
-        req_id = f"LR-{count + 101}"
-        # Add to leave requests using their actual ID
-        await db.leave_requests.insert_one({
-            "req_id": req_id,
-            "emp_id": actual_emp_id, 
-            "employee_name": emp["name"], # Good to store the name here too!
-            "type": leave_type, 
-            "days": days, 
-            "status": "Pending HR Approval"
-        })
-        return f"SUCCESS: {days} days of {leave_type} leave applied for {emp['name']}. Remaining balance: {new_balance}."
-    else:
-        return f"DENIED: {emp['name']} only has {emp[balance_key]} {leave_type} leaves left."
 
 @tool
 async def get_upcoming_holidays() -> str:
     """Useful to find out the upcoming official company holidays and festival days off."""
     print("🛠️ TOOL CALLED: Fetching company holidays from MongoDB")
     
-    # Fetch from a new 'holidays' collection in MongoDB
     cursor = db.holidays.find().sort("date", 1) 
     holidays = await cursor.to_list(length=20)
     
@@ -250,13 +205,14 @@ async def get_upcoming_holidays() -> str:
 async def raise_hr_ticket(employee_id_or_name: str, issue_summary: str) -> str:
     """
     STRICT RULE: DO NOT use this tool on the user's first complaint. 
-    You MUST ask the user 1 or 2 clarifying questions first to understand the root cause (e.g., "How much was it short?", "Did you work overtime?"). 
-    ONLY trigger this tool AFTER they reply with more details, OR if they explicitly demand a ticket.
+    You MUST ask the user 1 or 2 clarifying questions first to understand the root cause.
     The 'issue_summary' MUST be a detailed, bulleted summary of the entire chat history.
     """
+    if not isinstance(employee_id_or_name, str) or not employee_id_or_name.strip():
+        return "Please provide a valid employee name or ID."
+
     print(f"🛠️ TOOL CALLED: Raising HR ticket for {employee_id_or_name}")
     
-    # Smart lookup: Try ID first, then fallback to Name
     emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
     if not emp:
         emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
@@ -266,11 +222,9 @@ async def raise_hr_ticket(employee_id_or_name: str, issue_summary: str) -> str:
     
     actual_emp_id = emp["employee_id"]
     
-    # Generate a unique ticket ID
     count = await db.hr_tickets.count_documents({})
     ticket_id = f"TKT-{count + 1000}"
     
-    # Insert the summarized ticket into MongoDB
     await db.hr_tickets.insert_one({
         "ticket_id": ticket_id,
         "emp_id": actual_emp_id, 
@@ -280,7 +234,6 @@ async def raise_hr_ticket(employee_id_or_name: str, issue_summary: str) -> str:
         "created_at": datetime.utcnow()
     })
     
-    # Log the action (from Phase 2)
     await log_audit_action(
         action_name="RAISE_TICKET", 
         details=f"Escalated ticket {ticket_id} for {emp['name']}."
@@ -297,9 +250,8 @@ async def onboard_employee(new_hire_name: str, role: str, department: str, bank_
     print(f"🛠️ TOOL CALLED: Onboarding {new_hire_name} into {department}")
     
     count = await db.employees.count_documents({})
-    new_id = f"emp_{count + 100}" # Starts IDs at emp_100 to avoid clashes
+    new_id = f"emp_{count + 100}" 
     
-    # Inserts into the HRIS database
     await db.employees.insert_one({
         "employee_id": new_id,
         "name": new_hire_name, 
@@ -324,9 +276,11 @@ async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str
     Useful for HR to orchestrate cross-system offboarding.
     Triggers HRIS termination, IT access revocation, and Payroll final settlement.
     """
+    if not isinstance(employee_id_or_name, str) or not employee_id_or_name.strip():
+        return "Please provide a valid employee name or ID."
+
     print(f"🛠️ TOOL CALLED: Multi-System Offboarding for {employee_id_or_name} on {offboard_date}")
     
-    # Smart lookup: ID or Name
     emp = await db.employees.find_one({"employee_id": employee_id_or_name.lower()})
     if not emp:
         emp = await db.employees.find_one({"name": {"$regex": employee_id_or_name, "$options": "i"}})
@@ -337,13 +291,11 @@ async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str
     actual_emp_id = emp["employee_id"]
     emp_name = emp["name"]
     
-    # 1. Update HRIS System (employees collection)
     await db.employees.update_one(
         {"employee_id": actual_emp_id}, 
         {"$set": {"status": "Terminated", "offboard_date": offboard_date}}
     )
     
-    # 2. Trigger IT System (it_tickets collection)
     await db.it_tickets.insert_one({
         "emp_id": actual_emp_id,
         "employee_name": emp_name,
@@ -352,7 +304,6 @@ async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str
         "status": "Pending IT Action"
     })
     
-    # 3. Trigger Payroll System (payroll collection)
     await db.payroll.insert_one({
         "emp_id": actual_emp_id,
         "employee_name": emp_name,
@@ -396,18 +347,15 @@ async def list_employees(department: str = None) -> str:
     """
     print(f"🛠️ TOOL CALLED: Listing employees (Department filter: {department})")
     
-    # If a department is provided, filter by it. Otherwise, get everyone.
-    query = {"department": department} if department else {}
+    query = {"department": {"$regex": department, "$options": "i"}} if department else {}
     
-    # Fetch up to 50 employees from MongoDB
     cursor = db.employees.find(query)
     employees = await cursor.to_list(length=50)
     
     if not employees:
         return "No employees found in the database."
         
-    # Format the list nicely
-    emp_list = "\n".join([f"- {emp.get('name', 'Unknown')} (ID: {emp.get('employee_id', 'N/A')}, Role: {emp.get('role', 'N/A')})" for emp in employees])
+    emp_list = "\n".join([f"- {emp.get('name', 'Unknown')} (ID: {emp.get('employee_id', 'N/A')}, Role: {emp.get('role', 'N/A')}, Dept: {emp.get('department', 'N/A')})" for emp in employees])
     
     return f"Here is the requested employee list:\n{emp_list}"
 
