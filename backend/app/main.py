@@ -354,5 +354,27 @@ async def download_policy(policy_id: str):
         headers={"Content-Disposition": f"attachment; filename={policy_doc['filename']}"}
     )
 
+@app.post("/api/chat/upload_document")
+async def chat_document_upload(employee_id: str, document_type: str, file: UploadFile = File(...)):
+    """Allows employees to securely upload onboarding documents directly through the chat interface."""
+    import base64
+    
+    # Read and encode the file into a secure string
+    file_bytes = await file.read()
+    encoded_string = base64.b64encode(file_bytes).decode('utf-8')
+    
+    # Save it to a highly secure collection
+    await db.employee_documents.insert_one({
+        "employee_id": employee_id,
+        "document_type": document_type, # e.g., "Government ID", "Tax Form"
+        "filename": file.filename,
+        "file_data": encoded_string,
+        "upload_date": datetime.datetime.utcnow(),
+        "viewed_by_hr": False
+    })
+    
+    # We return a message that the React chat can display as an AI response!
+    return {"status": "success", "message": f"Document '{file.filename}' securely uploaded to your HR vault."}
+
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

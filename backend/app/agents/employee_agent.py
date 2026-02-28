@@ -49,21 +49,26 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         return "Please type a valid message."
         
     # --- 1. IDENTITY & ACCESS LOOKUP ---
-    user_record = await db.employees.find_one({"employee_id": employee_id.lower()})
+    from bson import ObjectId
+    # Try finding them by ObjectId first (since our login uses MongoDB _id)
+    try:
+        user_record = await db.users.find_one({"_id": ObjectId(employee_id)})
+    except:
+        user_record = await db.users.find_one({"employee_id": employee_id.lower()})
     
     if user_record:
         user_name = user_record.get("name", "Unknown")
         user_department = user_record.get("department", "Employee")
+        onboarding_status = user_record.get("onboarding_status", "Completed") # <--- Get Status
         
-        # FIX: Use 'in' to catch variations like "HR Admin", "HR Department", etc.
         dep_lower = user_department.lower()
         is_hr_admin = "hr" in dep_lower or "human resources" in dep_lower
-        
         role_title = "HR Administrator" if is_hr_admin else f"{user_department} Employee"
     else:
         user_name = "Guest"
         role_title = "Unverified User"
         is_hr_admin = False
+        onboarding_status = "Unknown"
 
     # 🛡️ FIX 2: Hardcoded Python-Level Security
     # Standard tools everyone gets
@@ -83,6 +88,8 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         "3. If a Standard Employee asks you to perform an HR-only action, you MUST completely refuse, "
         "address them by name, and tell them they do not have the required security clearance.\n"
         "\n--- WORKFLOW ORCHESTRATION RULES ---\n"
+        f"\n--- ONBOARDING STATUS: {onboarding_status.upper()} ---\n"
+        "If the user's status is PENDING: You MUST immediately greet them, tell them they need to complete their onboarding, and ask them for their Bank Account Number and Emergency Contact. Once they provide both, use the 'complete_onboarding_profile' tool.\n"
         "4. ONBOARDING: If an HR Admin asks to onboard someone, you MUST NOT call the tool immediately. "
         "You must first converse with them to collect the new hire's Bank Account Number and Emergency Contact Number. "
         "Only call the onboard tool once you have all the data.\n"

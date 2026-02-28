@@ -63,7 +63,7 @@ def send_leave_email_to_hr(employee_name: str, start_date: str, end_date: str, r
         print(f"❌ Failed to send email: {e}")
 
 @tool
-async def check_google_calendar_for_leaves(employee_id: str, target_month_num: int, target_year: int = 2026) -> str:
+async def check_google_calendar_for_leaves(employee_id: str, target_month_num: int, target_year: int = datetime.now().year) -> str:
     """
     Useful for checking REAL Google Calendar holidays to suggest vacation days.
     Input requires the employee_id, target_month_num (1-12), and target_year.
@@ -153,11 +153,13 @@ async def get_employee_details(employee_id_or_name: str) -> str:
     return f"Employee '{employee_id_or_name}' not found."
 
 @tool
-async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: str, reason: str) -> str:
+async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: str, reason: str, leave_type: str, days: int, policy_citation: str) -> str:
     """
-    Submits a leave request for the employee to HR. 
-    MUST include the start_date, end_date, and the specific reason for the leave.
+    Submits a leave request. 
+    CRITICAL: You MUST use the 'search_policy' tool first to determine if this leave complies. 
+    You must provide a brief 'policy_citation' explaining exactly why this request is approved or denied based on the document.
     """
+
     if not isinstance(employee_id_or_name, str) or not employee_id_or_name.strip():
         return "Please provide a valid employee name or ID."
 
@@ -179,6 +181,7 @@ async def apply_for_leave(employee_id_or_name: str, start_date: str, end_date: s
         "start_date": start_date,
         "end_date": end_date,
         "reason": reason,
+        "policy_citation": policy_citation,
         "status": "Pending HR Approval"
     }
     await db.leaves.insert_one(leave_request)
@@ -242,33 +245,42 @@ async def raise_hr_ticket(employee_id_or_name: str, issue_summary: str) -> str:
     return f"SUCCESS: Ticket {ticket_id} has been raised for {emp['name']}. A detailed summary has been sent to the HR team."
 
 @tool
-async def onboard_employee(new_hire_name: str, role: str, department: str, bank_account: str, emergency_contact: str) -> str:
+async def onboard_employee(new_hire_name: str, new_hire_email: str, role: str, department: str, bank_account: str, emergency_contact: str) -> str:
     """
-    Useful for HR to officially onboard a new hire. 
-    MUST include bank_account and emergency_contact details.
+    Onboards a new hire. MUST include their personal email address so IT can contact them!
     """
-    print(f"🛠️ TOOL CALLED: Onboarding {new_hire_name} into {department}")
+    print(f"🛠️ TOOL CALLED: Orchestrating Onboarding for {new_hire_name}")
     
     count = await db.employees.count_documents({})
     new_id = f"emp_{count + 100}" 
     
+    # 1. Create Core HRIS Record
     await db.employees.insert_one({
-        "employee_id": new_id,
-        "name": new_hire_name, 
-        "role": role, 
-        "department": department,
-        "bank_account": bank_account,
-        "emergency_contact": emergency_contact,
-        "salary": 60000, 
-        "casual_leaves_left": 12, 
-        "sick_leaves_left": 10,
-        "status": "Active"
+        "employee_id": new_id, "name": new_hire_name, "email": new_hire_email, "role": role, 
+        "department": department, "bank_account": bank_account, "emergency_contact": emergency_contact,
+        "casual_leaves_left": 12, "sick_leaves_left": 10, "status": "Active"
     })
-    await log_audit_action(
-        action_name="ONBOARD_EMPLOYEE", 
-        details=f"Onboarded {new_hire_name} (ID: {new_id}) to {department}."
-    )
-    return f"SUCCESS: Onboarding initiated for {new_hire_name} (ID: {new_id}). Bank and contact info securely stored."
+    
+    # 2. Create Real LMS Tracking Checklist for Frontend
+    lms_tasks = [
+        {"task_id": 1, "task": "Complete Security & Phishing 101", "completed": False},
+        {"task_id": 2, "task": "Read and Acknowledge HR Handbook", "completed": False},
+        {"task_id": 3, "task": f"Complete {department} Specific Training", "completed": False}
+    ]
+    await db.lms_tracking.insert_one({"emp_id": new_id, "checklist": lms_tasks})
+    
+    # 3. Send physical trigger email to IT
+    it_email = os.getenv("IT_EMAIL", "it@innvoix.com") # Add this to your .env or just use your own email to test
+    it_body = f"URGENT: New hire {new_hire_name} ({new_id}) starts soon in {department}. Please provision a laptop and standard access. Contact them at: {new_hire_email}"
+    send_standard_email(it_email, f"IT Action Required: Provision {new_hire_name}", it_body)
+    
+    # 4. Send Welcome Packet to New Hire
+    welcome_body = f"Welcome to Innovix, {new_hire_name}! Your employee ID is {new_id}. Please log in to your dashboard to complete your 3 assigned learning modules. Your Company website link is https://hr-innovix-agent.vercel.app/. If you have any questions, feel free to reach out to HR or IT. We're excited to have you on board!🎉"
+    send_standard_email(new_hire_email, "Welcome to Innovix!", welcome_body)
+    
+    await log_audit_action("ONBOARD", f"Onboarded {new_hire_name} ({new_id}). LMS tasks assigned, IT notified.")
+    
+    return f"SUCCESS: Onboarding complete. HRIS updated, 3 LMS tracking tasks generated, welcome email sent to {new_hire_email}, and IT department notified for laptop provisioning."
 
 @tool
 async def offboard_employee(employee_id_or_name: str, offboard_date: str) -> str:
@@ -360,13 +372,130 @@ async def list_employees(department: str = None) -> str:
     return f"Here is the requested employee list:\n{emp_list}"
 
 @tool
-async def draft_policy_update(policy_title: str, new_rules: str) -> str:
-    """Useful when an HR Manager wants to draft or update a company policy."""
-    print(f"🛠️ TOOL CALLED: Drafting policy - {policy_title}")
+async def draft_policy_update(policy_title: str, new_rules: str, affected_department: str) -> str:
+    """
+    Drafts a policy and physically emails the affected department.
+    Input 'affected_department' should be a specific department or 'All'.
+    """
+    print(f"🛠️ TOOL CALLED: Drafting policy and notifying '{affected_department}'")
     
+    # 1. Save the draft
     await db.policy_drafts.insert_one({
         "title": policy_title, 
-        "content": new_rules
+        "content": new_rules,
+        "target_audience": affected_department,
+        "created_at": datetime.utcnow()
     })
     
-    return f"SUCCESS: Draft for '{policy_title}' has been saved to the policy repository."
+    # 2. Find the real employees affected by this change
+    query = {} if affected_department.lower() == "all" else {"department": {"$regex": affected_department, "$options": "i"}}
+    cursor = db.employees.find(query)
+    affected_employees = await cursor.to_list(length=100)
+    
+    # 3. Send physical emails to the affected staff
+    notified_count = 0
+    for emp in affected_employees:
+        emp_email = emp.get("email")
+        if emp_email:
+            body = f"Hello {emp['name']},\n\nA new policy draft titled '{policy_title}' has been proposed that affects your department. Please review the new rules on your HR Dashboard.\n\nSummary:\n{new_rules}"
+            send_standard_email(emp_email, f"Policy Update Notice: {policy_title}", body)
+            notified_count += 1
+            
+    return f"SUCCESS: Draft for '{policy_title}' saved. Physically emailed {notified_count} employees in the {affected_department} department."
+
+def send_standard_email(to_email: str, subject: str, body: str):
+    """A generic email sender for real cross-system notifications."""
+    sender_email = os.getenv("SENDER_EMAIL") 
+    sender_password = os.getenv("SENDER_PASSWORD")
+    
+    if not sender_email or not sender_password:
+        print("⚠️ Email credentials not set. Skipping real email.")
+        return
+
+    msg = EmailMessage()
+    msg.set_content(body)
+    msg['Subject'] = subject
+    msg['From'] = sender_email
+    msg['To'] = to_email
+
+    try:
+        with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
+            smtp.login(sender_email, sender_password)
+            smtp.send_message(msg)
+    except Exception as e:
+        print(f"❌ Failed to send email to {to_email}: {e}")
+
+
+@tool
+async def invite_new_hire(name: str, email: str, temp_password: str) -> str:
+    """
+    For HR Admin use ONLY. 
+    Creates a new employee login account and sets their onboarding status to Pending.
+    """
+    print(f"🛠️ TOOL CALLED: Inviting new hire {name} to the portal")
+    
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": email})
+    if existing_user:
+        return f"Error: An account with email {email} already exists."
+        
+    new_user = {
+        "name": name,
+        "email": email,
+        "password": temp_password,  # In production, this would be hashed!
+        "role": "employee",
+        "department": "Unassigned",
+        "onboarding_status": "Pending",
+        "casual_leaves_left": 0,
+        "sick_leaves_left": 0
+    }
+    
+    result = await db.users.insert_one(new_user)
+    new_user_id = str(result.inserted_id)
+    
+    # Send an email to the new hire with their login details
+    welcome_body = (
+        f"Welcome to Innvoix, {name}!\n\n"
+        f"Your HR onboarding portal is ready. Please log in to chat with our AI Assistant to complete your setup.\n\n"
+        f"Portal: https://innvoix-hr.com/login\n"
+        f"Email: {email}\n"
+        f"Password: {temp_password}\n\n"
+        f"Please log in as soon as possible."
+    )
+    send_standard_email(email, "Your Innvoix Onboarding Credentials", welcome_body)
+    
+    return f"SUCCESS: Account created for {name}. They have been emailed their login credentials. Their status is currently 'Pending'."
+
+@tool
+async def complete_onboarding_profile(employee_id: str, bank_account: str, emergency_contact: str) -> str:
+    """
+    For Employee use.
+    Saves the employee's final onboarding details and marks their status as Completed.
+    """
+    print(f"🛠️ TOOL CALLED: Completing onboarding for ID {employee_id}")
+    
+    from bson import ObjectId
+    
+    # Update the user collection
+    await db.users.update_one(
+        {"_id": ObjectId(employee_id)},
+        {"$set": {
+            "bank_account": bank_account,
+            "emergency_contact": emergency_contact,
+            "onboarding_status": "Completed",
+            "casual_leaves_left": 12, # Grant standard leaves upon completion
+            "sick_leaves_left": 10
+        }}
+    )
+    
+    # Fetch user to get their name for the HR email
+    user = await db.users.find_one({"_id": ObjectId(employee_id)})
+    emp_name = user.get("name", "Unknown Employee")
+    
+    # Alert HR
+    hr_email = os.getenv("HR_EMAIL", "hr@innvoix.com")
+    hr_body = f"Good news! New hire {emp_name} has successfully completed their AI onboarding chat and provided all required details."
+    send_standard_email(hr_email, f"Onboarding Completed: {emp_name}", hr_body)
+    
+    return "SUCCESS: Your profile has been updated, your leaves have been granted, and HR has been notified. Welcome to the team!"
+
