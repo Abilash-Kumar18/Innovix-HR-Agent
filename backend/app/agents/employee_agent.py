@@ -11,7 +11,7 @@ from app.tools.search_tools import search_policy
 from app.tools.hr_tools import (
     db, draft_policy_update, get_employee_details, apply_for_leave, 
     get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, 
-    raise_hr_ticket, list_employees, offboard_employee, check_google_calendar_for_leaves
+    raise_hr_ticket, list_employees, offboard_employee, check_google_calendar_for_leaves,invite_new_hire, complete_onboarding_profile
 )
 
 load_dotenv()
@@ -72,11 +72,11 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
 
     # 🛡️ FIX 2: Hardcoded Python-Level Security
     # Standard tools everyone gets
-    safe_tools = [search_policy, get_employee_details, apply_for_leave, get_upcoming_holidays, raise_hr_ticket, check_google_calendar_for_leaves]
+    safe_tools = [search_policy, get_employee_details, apply_for_leave, get_upcoming_holidays, raise_hr_ticket, check_google_calendar_for_leaves,complete_onboarding_profile]
     
     # Give HR the keys to the castle
     if is_hr_admin:
-        safe_tools.extend([onboard_employee, offboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees])
+        safe_tools.extend([onboard_employee, offboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees, invite_new_hire])
 
     system_instruction = (
         f"You are the Innvoix HR Agentic AI. "
@@ -89,7 +89,15 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
         "address them by name, and tell them they do not have the required security clearance.\n"
         "\n--- WORKFLOW ORCHESTRATION RULES ---\n"
         f"\n--- ONBOARDING STATUS: {onboarding_status.upper()} ---\n"
-        "If the user's status is PENDING: You MUST immediately greet them, tell them they need to complete their onboarding, and ask them for their Bank Account Number and Emergency Contact. Once they provide both, use the 'complete_onboarding_profile' tool.\n"
+        "INVITING VS ONBOARDING: If HR asks to 'invite' a new hire and provides an email and password, use the 'invite_new_hire' tool immediately. If HR asks to fully 'onboard' an employee, you must ask for their full details (Bank account, Manager email, etc.) before using the 'onboard_employee' tool."
+        "If the user's status is PENDING: You MUST immediately greet them and tell them they need to complete their onboarding profile. "
+        "You MUST ask them to provide ALL of the following details: \n"
+        "1. Phone Number\n"
+        "2. Home Address\n"
+        "3. Bank Account Number\n"
+        "4. Emergency Contact\n"
+        "Also, politely remind them to use the chat attachment button to upload a copy of their Government ID. "
+        "Do NOT use the 'complete_onboarding_profile' tool until they have provided all 4 text details in the chat."
         "4. ONBOARDING: If an HR Admin asks to onboard someone, you MUST NOT call the tool immediately. "
         "You must first converse with them to collect the new hire's Bank Account Number and Emergency Contact Number. "
         "Only call the onboard tool once you have all the data.\n"

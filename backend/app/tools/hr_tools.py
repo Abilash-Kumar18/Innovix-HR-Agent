@@ -467,7 +467,7 @@ async def invite_new_hire(name: str, email: str, temp_password: str) -> str:
     return f"SUCCESS: Account created for {name}. They have been emailed their login credentials. Their status is currently 'Pending'."
 
 @tool
-async def complete_onboarding_profile(employee_id: str, bank_account: str, emergency_contact: str) -> str:
+async def complete_onboarding_profile(employee_id: str, phone_number: str, home_address: str, bank_account: str, emergency_contact: str) -> str:
     """
     For Employee use.
     Saves the employee's final onboarding details and marks their status as Completed.
@@ -476,10 +476,12 @@ async def complete_onboarding_profile(employee_id: str, bank_account: str, emerg
     
     from bson import ObjectId
     
-    # Update the user collection
+    # Update the user collection with ALL the new details
     await db.users.update_one(
         {"_id": ObjectId(employee_id)},
         {"$set": {
+            "phone_number": phone_number,
+            "home_address": home_address,
             "bank_account": bank_account,
             "emergency_contact": emergency_contact,
             "onboarding_status": "Completed",
@@ -494,8 +496,7 @@ async def complete_onboarding_profile(employee_id: str, bank_account: str, emerg
     
     # Alert HR
     hr_email = os.getenv("HR_EMAIL", "hr@innvoix.com")
-    hr_body = f"Good news! New hire {emp_name} has successfully completed their AI onboarding chat and provided all required details."
+    hr_body = f"Good news! New hire {emp_name} has successfully completed their AI onboarding chat and provided all required details (Phone, Address, Bank, Emergency Contact)."
     send_standard_email(hr_email, f"Onboarding Completed: {emp_name}", hr_body)
     
     return "SUCCESS: Your profile has been updated, your leaves have been granted, and HR has been notified. Welcome to the team!"
-
