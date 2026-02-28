@@ -28,7 +28,7 @@ pnpm-debug.log*
 *.njsproj
 *.sln
 *.sw?
-
+backend/data/policies/
 Frontend/.env
 backend/venv/
 backend/data/google_credentials.json
