@@ -11,7 +11,7 @@ from app.tools.search_tools import search_policy
 from app.tools.hr_tools import (
     db, draft_policy_update, get_employee_details, apply_for_leave, 
     get_upcoming_holidays, onboard_employee, prepare_sensitive_transaction, 
-    raise_hr_ticket, list_employees, offboard_employee, check_google_calendar_for_leaves,invite_new_hire, complete_onboarding_profile
+    raise_hr_ticket, list_employees, offboard_employee, check_google_calendar_for_leaves,invite_new_hire, complete_onboarding_profile, send_leave_email_to_hr,send_standard_email, draft_policy_update
 )
 
 load_dotenv()
@@ -72,11 +72,11 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_001"):
 
     # 🛡️ FIX 2: Hardcoded Python-Level Security
     # Standard tools everyone gets
-    safe_tools = [search_policy, get_employee_details, apply_for_leave, get_upcoming_holidays, raise_hr_ticket, check_google_calendar_for_leaves,complete_onboarding_profile]
+    safe_tools = [search_policy, get_employee_details, apply_for_leave, get_upcoming_holidays, raise_hr_ticket, check_google_calendar_for_leaves,complete_onboarding_profile,send_leave_email_to_hr]
     
     # Give HR the keys to the castle
     if is_hr_admin:
-        safe_tools.extend([onboard_employee, offboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees, invite_new_hire])
+        safe_tools.extend([onboard_employee, offboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees, invite_new_hire,send_standard_email])
 
     system_instruction = (
         f"You are the Innvoix HR Agentic AI. "
