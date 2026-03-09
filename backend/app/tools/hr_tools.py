@@ -426,36 +426,90 @@ def send_standard_email(to_email: str, subject: str, body: str):
         print(f"❌ Failed to send email to {to_email}: {e}")
 
 
+import random
+import string
+
 @tool
-async def invite_new_hire(name: str, email: str, temp_password: str) -> str:
+async def invite_new_hire(name: str, email: str, role: str, department: str) -> str:
     """
-    For HR Admin use ONLY. 
-    Creates a new employee login account and sets their onboarding status to Pending.
+    For HR use ONLY. 
+    Creates a new employee login account, assigns an official HR ID, and sets status to Pending.
     """
-    print(f"🛠️ TOOL CALLED: Inviting new hire {name} to the portal")
+    print(f"🛠️ TOOL CALLED: Inviting new hire {name} to {department}")
     
     # Check if user already exists
     existing_user = await db.users.find_one({"email": email})
     if existing_user:
         return f"Error: An account with email {email} already exists."
         
+    # Generate official employee_id (e.g., emp_105)
+    count = await db.employees.count_documents({})
+    new_emp_id = f"emp_{count + 100}"
+    
+    # --- ENTERPRISE FIX: Auto-Generate the Password in Python ---
+    first_name = name.split()[0].lower()
+    random_nums = ''.join(random.choices(string.digits, k=4))
+    auto_password = f"{first_name}@{random_nums}" # Example: thiru@4921
+    # ------------------------------------------------------------
+        
     new_user = {
+        "employee_id": new_emp_id,  
         "name": name,
         "email": email,
-        "password": temp_password,  # In production, this would be hashed!
-        "role": "employee",
-        "department": "Unassigned",
+        "password": auto_password,  # Save the auto-generated password
+        "role": role,              
+        "department": department,  
+        "onboarding_status": "Pending",
+        "casual_leaves_left": 12,
+        "sick_leaves_left": 8
+    }
+    
+    result = await db.users.insert_one(new_user)
+
+    welcome_body = (
+        f"Welcome to Innvoix, {name}!\n\n"
+        f"Your official Employee ID is {new_emp_id}.\n"
+        f"Your HR onboarding portal is ready. Please log in to chat with our AI Assistant to complete your setup.\n\n"
+        f"Portal: https://innvoix-hr.com/login\n"
+        f"Email: {email}\n"
+        f"Password: {auto_password}\n\n"
+        f"Please log in as soon as possible and change this temporary password."
+    )
+    send_standard_email(email, "Your Innvoix Onboarding Credentials", welcome_body)
+    
+    return f"SUCCESS: Account created for {name} (ID: {new_emp_id}). Role: {role}, Dept: {department}. Credentials emailed. Status is 'Pending'."
+    """
+    For HR Admin use ONLY. 
+    Creates a new employee login account, assigns an official HR ID, and sets status to Pending.
+    """
+    print(f"🛠️ TOOL CALLED: Inviting new hire {name} to {department}")
+    
+    # Check if user already exists
+    existing_user = await db.users.find_one({"email": email})
+    if existing_user:
+        return f"Error: An account with email {email} already exists."
+        
+    # Generate official employee_id (e.g., emp_105)
+    count = await db.employees.count_documents({})
+    new_emp_id = f"emp_{count + 100}"
+        
+    new_user = {
+        "employee_id": new_emp_id,  # <--- Storing their official ID!
+        "name": name,
+        "email": email,
+        "password": temp_password,  
+        "role": role,              # <--- Added Role
+        "department": department,  # <--- Added Department
         "onboarding_status": "Pending",
         "casual_leaves_left": 0,
         "sick_leaves_left": 0
     }
     
     result = await db.users.insert_one(new_user)
-    new_user_id = str(result.inserted_id)
     
-    # Send an email to the new hire with their login details
     welcome_body = (
         f"Welcome to Innvoix, {name}!\n\n"
+        f"Your official Employee ID is {new_emp_id}.\n"
         f"Your HR onboarding portal is ready. Please log in to chat with our AI Assistant to complete your setup.\n\n"
         f"Portal: https://innvoix-hr.com/login\n"
         f"Email: {email}\n"
@@ -464,39 +518,59 @@ async def invite_new_hire(name: str, email: str, temp_password: str) -> str:
     )
     send_standard_email(email, "Your Innvoix Onboarding Credentials", welcome_body)
     
-    return f"SUCCESS: Account created for {name}. They have been emailed their login credentials. Their status is currently 'Pending'."
+    return f"SUCCESS: Account created for {name} (ID: {new_emp_id}). Role: {role}, Dept: {department}. Credentials emailed. Status is 'Pending'."
+
 
 @tool
 async def complete_onboarding_profile(employee_id: str, phone_number: str, home_address: str, bank_account: str, emergency_contact: str) -> str:
     """
     For Employee use.
-    Saves the employee's final onboarding details and marks their status as Completed.
+    Saves the employee's final onboarding details and officially pushes them into the HRIS database.
     """
     print(f"🛠️ TOOL CALLED: Completing onboarding for ID {employee_id}")
     
-    from bson import ObjectId
-    
-    # Update the user collection with ALL the new details
-    await db.users.update_one(
-        {"_id": ObjectId(employee_id)},
+    # 1. Update the Auth (Users) collection using the custom employee_id string!
+    result = await db.users.update_one(
+        {"employee_id": employee_id},  # <--- FIXED: No more ObjectId casting!
         {"$set": {
             "phone_number": phone_number,
             "home_address": home_address,
             "bank_account": bank_account,
             "emergency_contact": emergency_contact,
             "onboarding_status": "Completed",
-            "casual_leaves_left": 12, # Grant standard leaves upon completion
+            "casual_leaves_left": 12, 
             "sick_leaves_left": 10
         }}
     )
     
-    # Fetch user to get their name for the HR email
-    user = await db.users.find_one({"_id": ObjectId(employee_id)})
+    # 2. Fetch the fully updated user
+    user = await db.users.find_one({"employee_id": employee_id}) # <--- FIXED
+    
+    if not user:
+        return f"System Error: Could not locate pending employee {employee_id}."
+        
     emp_name = user.get("name", "Unknown Employee")
+    official_emp_id = user.get("employee_id", employee_id)
+    
+    # 3. CRITICAL: Clone them into the main 'employees' collection so other tools work!
+    await db.employees.insert_one({
+        "employee_id": official_emp_id,
+        "name": emp_name,
+        "email": user.get("email"),
+        "role": user.get("role"),
+        "department": user.get("department"),
+        "phone_number": phone_number,
+        "home_address": home_address,
+        "bank_account": bank_account,
+        "emergency_contact": emergency_contact,
+        "casual_leaves_left": 12,
+        "sick_leaves_left": 10,
+        "status": "Active"
+    })
     
     # Alert HR
     hr_email = os.getenv("HR_EMAIL", "hr@innvoix.com")
-    hr_body = f"Good news! New hire {emp_name} has successfully completed their AI onboarding chat and provided all required details (Phone, Address, Bank, Emergency Contact)."
+    hr_body = f"Good news! New hire {emp_name} ({official_emp_id}) has successfully completed their AI onboarding chat. They have been officially added to the active HRIS employee database."
     send_standard_email(hr_email, f"Onboarding Completed: {emp_name}", hr_body)
     
-    return "SUCCESS: Your profile has been updated, your leaves have been granted, and HR has been notified. Welcome to the team!"
+    return "SUCCESS: Your profile has been updated, you have been added to the main HR database, and HR has been notified. Welcome to the team!"
