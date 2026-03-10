@@ -8,6 +8,7 @@ from datetime import datetime
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from email.message import EmailMessage
+import json
 
 load_dotenv()
 
@@ -24,10 +25,25 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 BACKEND_DIR = os.path.dirname(os.path.dirname(CURRENT_DIR))
 SERVICE_ACCOUNT_FILE = os.path.join(BACKEND_DIR, 'data', 'google_credentials.json')
 
+
 def get_calendar_service():
-    """Authenticates with Google Cloud using the Service Account JSON."""
-    creds = service_account.Credentials.from_service_account_file(
-        SERVICE_ACCOUNT_FILE, scopes=SCOPES)
+    """Authenticates with Google Cloud using Environment Variables (Prod) or Local JSON (Dev)."""
+    
+    # 1. Try to load from the Production Environment Variable first
+    env_creds = os.getenv("GOOGLE_CREDENTIALS_JSON")
+    
+    if env_creds:
+        # Parse the giant string back into a Python dictionary
+        creds_dict = json.loads(env_creds)
+        creds = service_account.Credentials.from_service_account_info(
+            creds_dict, scopes=SCOPES
+        )
+    else:
+        # 2. Fall back to the local file for your local terminal testing
+        creds = service_account.Credentials.from_service_account_file(
+            SERVICE_ACCOUNT_FILE, scopes=SCOPES
+        )
+        
     return build('calendar', 'v3', credentials=creds)
 
 def send_leave_email_to_hr(employee_name: str, start_date: str, end_date: str, reason: str):

@@ -93,13 +93,6 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_106"):
     if is_hr_admin:
         safe_tools.extend([onboard_employee, offboard_employee, prepare_sensitive_transaction, draft_policy_update, list_employees, invite_new_hire])
     
-    # ==========================================
-    # 🚨 ADD THESE 3 DEBUG LINES HERE 🚨
-    # ==========================================
-    print(f"\n🕵️ DEBUG: Recognized as HR Admin? -> {is_hr_admin}")
-    print(f"🕵️ DEBUG: User ID Used -> {real_emp_id}")
-    print(f"🕵️ DEBUG: Tools given to AI -> {[t.name for t in safe_tools]}\n")
-    # ==========================================
     system_instruction = (
         f"You are the Innvoix HR Agentic AI. "
         f"Chatting with {user_name}. Role: {role_title}. "
