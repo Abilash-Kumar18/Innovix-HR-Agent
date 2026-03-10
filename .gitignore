@@ -5,8 +5,8 @@ __pycache__/
 *.pyc
 *.pyo
 backend/.env
-backend/.venv/
 backend/.venv1/
+backend/data/policies/
 Frontend/.env
 # Logs
 logs
@@ -30,7 +30,6 @@ pnpm-debug.log*
 *.sw?
 backend/data/policies/
 Frontend/.env
-backend/venv/
 backend/data/google_credentials.json
 google_credentials.json
 node_modules/
