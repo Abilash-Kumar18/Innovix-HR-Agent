@@ -136,6 +136,7 @@ async def get_user_profile(user_id: str):
         
         user_data = {
             "id": str(user["_id"]),
+            "employee_id": user.get("employee_id", ""),  # <--- NEW: Send official ID to React!
             "name": user.get("name"),
             "role": user.get("role"),
             "department": user.get("department", "General"),

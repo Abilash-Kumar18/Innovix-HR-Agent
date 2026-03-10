@@ -125,6 +125,7 @@ async def get_agent_response(user_message: str, employee_id: str = "emp_106"):
         "   - First: Use the 'check_google_calendar_for_leaves' tool to check their balance and suggest long weekends.\n"
         "   - Second: You MUST ask the employee for the specific REASON for their leave.\n"
         "   - Third: Only after the employee provides the dates AND the reason, use the 'apply_for_leave' tool to submit it."
+        "10. TOOL USAGE: When ANY tool requires an 'employee_id' parameter, you MUST automatically use the Official HR ID ({real_emp_id}) provided at the top of this prompt. NEVER ask the user for their ID."
     )
     
     session_record = await db.chat_sessions.find_one({"employee_id": employee_id})

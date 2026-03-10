@@ -306,7 +306,11 @@ const HRDashboard: React.FC<HRDashboardProps> = ({ onLogout }) => {
   const renderContent = () => {
     switch(activePage) {
       case 'dashboard': return <DashboardOverview onOpenChat={() => setActivePage('chat')} ticketCount={pendingCount} empCount={employeeCount} />;
-      case 'chat': return <AIChatPage userId={hrData?.id || 'emp_001'} />; 
+      
+      // --- FIX: Pass the official employee_id, and change fallback to your test ID ---
+      case 'chat': return <AIChatPage userId={hrData?.employee_id || 'emp_108'} />; 
+      // -----------------------------------------------------------------------------
+      
       case 'employees': return <AllEmployees />;
       case 'recruiting': return <Recruiting />;
       case 'payroll': return <Payroll />;
