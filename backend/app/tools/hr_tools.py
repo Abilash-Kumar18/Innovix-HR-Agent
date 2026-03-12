@@ -449,7 +449,7 @@ import string
 async def invite_new_hire(name: str, email: str, role: str, department: str) -> str:
     """
     For HR use ONLY. 
-    Creates a new employee login account, assigns an official HR ID, and sets status to Pending.
+    Creates a new employee login account, assigns an official HR ID, auto-generates a secure password, and sets status to Pending.
     """
     print(f"🛠️ TOOL CALLED: Inviting new hire {name} to {department}")
     
@@ -494,49 +494,7 @@ async def invite_new_hire(name: str, email: str, role: str, department: str) -> 
     send_standard_email(email, "Your Innvoix Onboarding Credentials", welcome_body)
     
     return f"SUCCESS: Account created for {name} (ID: {new_emp_id}). Role: {role}, Dept: {department}. Credentials emailed. Status is 'Pending'."
-    """
-    For HR Admin use ONLY. 
-    Creates a new employee login account, assigns an official HR ID, and sets status to Pending.
-    """
-    print(f"🛠️ TOOL CALLED: Inviting new hire {name} to {department}")
     
-    # Check if user already exists
-    existing_user = await db.users.find_one({"email": email})
-    if existing_user:
-        return f"Error: An account with email {email} already exists."
-        
-    # Generate official employee_id (e.g., emp_105)
-    count = await db.employees.count_documents({})
-    new_emp_id = f"emp_{count + 100}"
-        
-    new_user = {
-        "employee_id": new_emp_id,  # <--- Storing their official ID!
-        "name": name,
-        "email": email,
-        "password": temp_password,  
-        "role": role,              # <--- Added Role
-        "department": department,  # <--- Added Department
-        "onboarding_status": "Pending",
-        "casual_leaves_left": 0,
-        "sick_leaves_left": 0
-    }
-    
-    result = await db.users.insert_one(new_user)
-    
-    welcome_body = (
-        f"Welcome to Innvoix, {name}!\n\n"
-        f"Your official Employee ID is {new_emp_id}.\n"
-        f"Your HR onboarding portal is ready. Please log in to chat with our AI Assistant to complete your setup.\n\n"
-        f"Portal: https://innvoix-hr.com/login\n"
-        f"Email: {email}\n"
-        f"Password: {temp_password}\n\n"
-        f"Please log in as soon as possible."
-    )
-    send_standard_email(email, "Your Innvoix Onboarding Credentials", welcome_body)
-    
-    return f"SUCCESS: Account created for {name} (ID: {new_emp_id}). Role: {role}, Dept: {department}. Credentials emailed. Status is 'Pending'."
-
-
 @tool
 async def complete_onboarding_profile(employee_id: str, phone_number: str, home_address: str, bank_account: str, emergency_contact: str) -> str:
     """

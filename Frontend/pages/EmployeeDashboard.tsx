@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import Sidebar from '../components/Sidebar'; 
 import { User, MapPin, Shield, BellRing, CheckCircle, FileText, Download, Clock, Send, ChevronRight, MessageSquare, Camera, X, Plus, AlertCircle, Bot, Calendar as CalendarIcon, Search, ChevronLeft, Phone, Mail, DollarSign } from 'lucide-react';
 // IMPORT YOUR API FUNCTIONS
-import { sendMessageToBackend, fetchUserProfile, fetchTickets, createTicket, fetchAllEmployees } from '../services/api';
+import { sendMessageToBackend, fetchUserProfile, fetchTickets, createTicket, fetchAllEmployees,uploadDocumentToBackend } from '../services/api';
 
 // --- DATA TYPES ---
 interface EmployeeData {
@@ -17,164 +17,267 @@ interface EmployeeData {
   leaves: { casual: number; sick: number; privilege: number; };
 }
 
-// --- 1. FULL PAGE AI CHAT COMPONENT (CONNECTED TO PYTHON) ---
-const AIChatPage = ({ userId }: { userId: string }) => {
-  const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Applying for leave\n• Company policies\n\nHow can I help you today?' }
-  ]);
+// Interface for Chat Messages to persist state
+interface ChatMessage {
+  id: number;
+  sender: 'ai' | 'user';
+  text: string;
+}
+
+// --- 1. FULL PAGE AI CHAT COMPONENT (PERSISTENT & ATTACHMENTS) ---
+// Now accepts messages and setMessages as props so they persist across tab changes
+// --- 1. FULL PAGE AI CHAT COMPONENT (GEMINI-STYLE UI) ---
+import { Loader2, Paperclip } from 'lucide-react'; // Ensure these are imported at the top of your file!
+
+const AIChatPage = ({ 
+  userId, 
+  messages, 
+  setMessages 
+}: { 
+  userId: string, 
+  messages: ChatMessage[], 
+  setMessages: React.Dispatch<React.SetStateAction<ChatMessage[]>> 
+}) => {
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
+  const [pendingFile, setPendingFile] = useState<File | null>(null); // State to hold the file before sending
+  const [thinkingStep, setThinkingStep] = useState('Analyzing request...');
+  
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Auto-scroll to bottom
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
 
+  // Cycle through "Thinking" steps to simulate tool calling while loading
+  useEffect(() => {
+    if (!loading) return;
+    const steps = ["Analyzing request...", "Searching HR Knowledge Base...", "Querying MongoDB...", "Formulating response..."];
+    let stepIndex = 0;
+    const interval = setInterval(() => {
+      stepIndex = (stepIndex + 1) % steps.length;
+      setThinkingStep(steps[stepIndex]);
+    }, 1500); // Changes text every 1.5 seconds
+    return () => clearInterval(interval);
+  }, [loading]);
+
   const handleSend = async () => {
-    if (!inputText.trim() || loading) return;
+    if (!inputText.trim() && !pendingFile) return;
     
-    const userMsg = inputText;
-    setMessages(prev => [...prev, { id: Date.now(), sender: 'user', text: userMsg }]);
+    const userMsgText = inputText;
+    const fileToSend = pendingFile;
+
+    // 1. Add User Message to UI instantly (with optional attachment)
+    setMessages(prev => [...prev, { 
+      id: Date.now(), 
+      sender: 'user', 
+      text: userMsgText,
+      attachment: fileToSend ? fileToSend.name : undefined // Add attachment to message state
+    } as any]);
+
     setInputText('');
-    setLoading(true); // Show typing indicator
+    setPendingFile(null); // Clear the staging area
+    setLoading(true); 
     
     try {
-      // Send message to FastAPI Backend
-      const aiResponse = await sendMessageToBackend(userMsg, userId);
-      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: aiResponse }]);
+      let combinedResponse = "";
+
+      // 2. If there is a file, upload it to the Backend first
+      if (fileToSend) {
+        setThinkingStep("Uploading document to secure vault...");
+        const uploadRes = await uploadDocumentToBackend(userId, 'Onboarding Document', fileToSend);
+        combinedResponse += `✅ ${uploadRes.message}\n\n`;
+      }
+
+      // 3. If there is text, send it to the LangGraph AI
+      if (userMsgText.trim()) {
+        setThinkingStep("Calling Agentic Tools...");
+        const chatRes = await sendMessageToBackend(userMsgText, userId);
+        combinedResponse += chatRes;
+      } else if (fileToSend && !userMsgText.trim()) {
+        // If they only sent a file with no text
+        combinedResponse += "I have securely saved your document to your HR profile. Is there anything else you need?";
+      }
+
+      // 4. Show AI Response
+      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: combinedResponse.trim() }]);
     } catch (error) {
-      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: "Sorry, my servers are currently offline." }]);
+      setMessages(prev => [...prev, { id: Date.now()+1, sender: 'ai', text: "❌ System Error: Failed to process your request." }]);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setPendingFile(e.target.files[0]); // Hold the file, don't send yet!
+    }
+    // Reset input so the same file can be selected again if removed
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
+  };
+
   return (
-    <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in-up w-full">
-      <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-white">
-        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center text-white shadow-md shadow-lime-200"><Bot size={24} /></div>
-        <div><h2 className="text-xl font-bold text-slate-800">HR Assistant</h2><div className="flex items-center gap-2"><span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span><span className="text-sm text-slate-500">{loading ? 'Typing...' : 'Online • Powered by AI'}</span></div></div>
+    <div className="flex flex-col h-[calc(100vh-8rem)] bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden animate-fade-in-up w-full relative">
+      
+      {/* HEADER */}
+      <div className="p-6 border-b border-slate-100 flex items-center gap-4 bg-white z-10 relative shadow-sm">
+        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center text-white shadow-md shadow-lime-200">
+          <Bot size={24} />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-slate-800">HR Copilot</h2>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+            <span className="text-sm text-slate-500">Agentic AI Online</span>
+          </div>
+        </div>
       </div>
+      
+      {/* CHAT HISTORY */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-slate-50/50">
-        {messages.map((msg) => (
+        {messages.map((msg: any) => (
           <div key={msg.id} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
             <div className={`flex gap-3 max-w-[80%] ${msg.sender === 'user' ? 'flex-row-reverse' : 'flex-row'}`}>
-              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.sender === 'user' ? 'hidden' : 'bg-lime-100 text-lime-600'}`}>{msg.sender === 'ai' && <Bot size={16}/>}</div>
-              <div className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-line shadow-sm ${msg.sender === 'user' ? 'bg-slate-900 text-white rounded-tr-sm' : 'bg-white text-slate-700 border border-slate-100 rounded-tl-sm'}`}>{msg.text}</div>
+              
+              {/* AI Avatar */}
+              <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${msg.sender === 'user' ? 'hidden' : 'bg-lime-100 text-lime-600'}`}>
+                {msg.sender === 'ai' && <Bot size={16}/>}
+              </div>
+              
+              {/* Message Bubble */}
+              <div className={`flex flex-col gap-2 ${msg.sender === 'user' ? 'items-end' : 'items-start'}`}>
+                
+                {/* Gemini-Style Attached Document Render */}
+                {msg.attachment && (
+                  <div className="bg-slate-800 border border-slate-700 rounded-xl p-3 flex items-center gap-3 shadow-sm w-max">
+                    <div className="bg-slate-700 p-2 rounded-lg text-lime-400"><FileText size={20}/></div>
+                    <div>
+                      <p className="text-sm font-bold text-white truncate max-w-[200px]">{msg.attachment}</p>
+                      <p className="text-xs text-slate-400">Document Upload</p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Text Bubble */}
+                {msg.text && (
+                  <div className={`p-4 rounded-2xl text-sm leading-relaxed whitespace-pre-line shadow-sm 
+                    ${msg.sender === 'user' ? 'bg-slate-900 text-white rounded-tr-sm' : 'bg-white text-slate-700 border border-slate-100 rounded-tl-sm'}`}>
+                    {msg.text}
+                  </div>
+                )}
+              </div>
+
             </div>
           </div>
         ))}
-        {loading && <div className="text-sm text-slate-400 italic flex items-center gap-2"><div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div> Agent is thinking...</div>}
+
+        {/* Dynamic Tool Calling Animation */}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="flex gap-3 max-w-[80%] flex-row">
+              <div className="w-8 h-8 rounded-full bg-lime-100 text-lime-600 flex items-center justify-center shrink-0">
+                <Bot size={16}/>
+              </div>
+              <div className="p-3.5 bg-white border border-slate-100 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3">
+                <Loader2 size={16} className="text-lime-500 animate-spin" />
+                <span className="text-sm text-slate-500 font-medium animate-pulse">{thinkingStep}</span>
+              </div>
+            </div>
+          </div>
+        )}
         <div ref={chatEndRef} />
       </div>
-      <div className="p-6 bg-white border-t border-slate-100">
-        <div className="flex gap-4 items-center bg-slate-50 p-2 rounded-full border border-slate-200 focus-within:border-lime-500 transition-all">
-          <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type your question..." className="flex-1 bg-transparent px-4 py-2 text-slate-700 focus:outline-none" onKeyPress={(e) => e.key === 'Enter' && handleSend()}/>
-          <button onClick={handleSend} disabled={!inputText.trim() || loading} className="w-10 h-10 bg-lime-500 hover:bg-lime-600 disabled:bg-slate-300 text-white rounded-full flex items-center justify-center transition-all shadow-md"><Send size={18} /></button>
+      
+      {/* INPUT AREA */}
+      <div className="p-4 bg-white border-t border-slate-100 flex flex-col gap-3">
+        
+        {/* Pending File Staging Area (Shows up above input if file is selected) */}
+        {pendingFile && (
+          <div className="flex items-center justify-between bg-lime-50 border border-lime-200 rounded-xl p-3 w-max shadow-sm animate-fade-in-up mx-2">
+            <div className="flex items-center gap-3">
+              <div className="bg-lime-200 text-lime-700 p-1.5 rounded-lg"><Paperclip size={16}/></div>
+              <span className="text-sm font-bold text-slate-700 max-w-[200px] truncate">{pendingFile.name}</span>
+            </div>
+            <button onClick={() => setPendingFile(null)} className="ml-4 text-slate-400 hover:text-red-500 transition-colors">
+              <X size={18} />
+            </button>
+          </div>
+        )}
+
+        <div className="flex gap-3 items-end bg-slate-50 p-2 rounded-3xl border border-slate-200 focus-within:border-lime-500 transition-all relative">
+          
+          <button 
+            onClick={() => fileInputRef.current?.click()}
+            className="w-10 h-10 shrink-0 bg-white border border-slate-200 hover:bg-slate-100 text-slate-600 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-sm mb-0.5"
+            title="Attach file or image"
+          >
+            <Plus size={20} />
+          </button>
+          
+          <input 
+            type="file" 
+            ref={fileInputRef} 
+            onChange={handleFileSelect} 
+            className="hidden" 
+            accept="image/*,.pdf,.doc,.docx"
+          />
+
+          <textarea 
+            value={inputText} 
+            onChange={(e) => setInputText(e.target.value)} 
+            placeholder={pendingFile ? "Add a message to this file..." : "Ask HR Copilot anything..."}
+            className="flex-1 bg-transparent px-2 py-2.5 text-slate-700 focus:outline-none resize-none max-h-32 min-h-[44px]" 
+            rows={1}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSend();
+              }
+            }}
+          />
+          
+          <button 
+            onClick={handleSend} 
+            disabled={(!inputText.trim() && !pendingFile) || loading} 
+            className="w-10 h-10 shrink-0 bg-lime-500 hover:bg-lime-600 disabled:bg-slate-300 text-white rounded-full flex items-center justify-center transition-all shadow-md mb-0.5"
+          >
+            <Send size={18} className={(inputText.trim() || pendingFile) && !loading ? "ml-0.5" : ""} />
+          </button>
         </div>
+        <p className="text-center text-[10px] text-slate-400 font-medium">HR Agentic AI can make mistakes. Please verify sensitive actions.</p>
       </div>
     </div>
   );
 };
 
-// --- 2. CALENDAR PAGE COMPONENT (No changes needed here yet) ---
+// --- 2. CALENDAR PAGE COMPONENT ---
 const CalendarPage = ({ setActivePage }: { setActivePage: (p: string) => void }) => {
-  const [currentDate, setCurrentDate] = useState(new Date());
-  const [searchDate, setSearchDate] = useState('');
-  const [selectedDayInfo, setSelectedDayInfo] = useState<{ day: number, event: any } | null>(null);
-
-  const events = [
-    { day: 5, title: 'Team Meeting', type: 'meeting', desc: 'Monthly sync with the engineering team.' },
-    { day: 12, title: 'Project Submission', type: 'deadline', desc: 'Final UI components due for review.' },
-    { day: 15, title: 'Client Review', type: 'meeting', desc: 'Showcase alpha build to stakeholders.' },
-    { day: 25, title: 'Public Holiday', type: 'holiday', desc: 'Office is closed for public holiday.' },
-  ];
-  const daysInMonth = new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 0).getDate();
-  const firstDayOfMonth = new Date(currentDate.getFullYear(), currentDate.getMonth(), 1).getDay();
-  const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  
-  const handleSearch = () => { alert(`Checking availability for ${searchDate}...`); };
-  const getEventForDay = (day: number) => events.find(e => e.day === day);
-
-  const handleDayClick = (day: number) => {
-    setSelectedDayInfo({ day, event: getEventForDay(day) });
-  };
+  const googleCalendarEmbedUrl = "https://calendar.google.com/calendar/embed?height=600&wkst=1&bgcolor=%23ffffff&ctz=Asia%2FKolkata&showTitle=0&showPrint=0&showTabs=1&showCalendars=0&src=ZW4uaW5kaWFuI2hvbGlkYXlAZ3JvdXAudi5jYWxlbmRhci5nb29nbGUuY29t&color=%230B8043";
 
   return (
-    <div className="flex flex-col lg:flex-row gap-8 h-full animate-fade-in-up w-full relative">
-      <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-100 p-8">
-        <div className="flex justify-between items-center mb-8">
-          <div><h2 className="text-2xl font-bold text-slate-800">{monthNames[currentDate.getMonth()]} {currentDate.getFullYear()}</h2><p className="text-slate-500 text-sm">Manage your schedule and leaves</p></div>
-          <div className="flex gap-2"><button className="p-2 border rounded-full hover:bg-slate-50"><ChevronLeft size={20}/></button><button className="p-2 border rounded-full hover:bg-slate-50"><ChevronRight size={20}/></button></div>
+    <div className="flex flex-col h-[calc(100vh-8rem)] animate-fade-in-up w-full space-y-6">
+      <div className="flex justify-between items-end">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Company Calendar</h2>
+          <p className="text-slate-500">View official company events, meetings, and holidays.</p>
         </div>
-        <div className="grid grid-cols-7 gap-4 text-center mb-4">{['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (<div key={day} className="text-sm font-bold text-slate-400 uppercase tracking-wider">{day}</div>))}</div>
-        <div className="grid grid-cols-7 gap-4">
-          {Array.from({ length: firstDayOfMonth }).map((_, i) => <div key={`empty-${i}`} />)}
-          {Array.from({ length: daysInMonth }).map((_, i) => {
-            const day = i + 1; 
-            const event = getEventForDay(day);
-            return (
-              <div 
-                key={day} 
-                onClick={() => handleDayClick(day)}
-                className={`h-24 border border-slate-100 rounded-xl p-2 relative group hover:border-lime-400 hover:shadow-md hover:-translate-y-1 transition-all cursor-pointer ${event?.type === 'holiday' ? 'bg-red-50' : 'bg-white'}`}
-              >
-                <span className="text-sm font-bold text-slate-700">{day}</span>
-                {event && (<div className={`mt-2 text-xs p-1.5 rounded-md font-medium truncate ${event.type === 'meeting' ? 'bg-blue-100 text-blue-700' : event.type === 'deadline' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>{event.title}</div>)}
-              </div>
-            );
-          })}
-        </div>
+        <button 
+          onClick={() => setActivePage('notifications')} 
+          className="bg-lime-500 hover:bg-lime-600 text-slate-900 px-5 py-2.5 rounded-xl font-bold shadow-md transition-all flex items-center gap-2"
+        >
+          <CalendarIcon size={18}/> Apply for Leave
+        </button>
       </div>
 
-      <div className="w-full lg:w-80 space-y-6">
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"><h3 className="font-bold text-slate-800 mb-4">Check Availability</h3><div className="relative mb-4"><input type="date" value={searchDate} onChange={(e) => setSearchDate(e.target.value)} className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm outline-none focus:border-lime-500"/><CalendarIcon size={18} className="absolute left-3 top-3.5 text-slate-400"/></div><button onClick={handleSearch} className="w-full bg-slate-900 text-white py-2.5 rounded-xl font-bold text-sm hover:bg-slate-800 flex items-center justify-center gap-2"><Search size={16}/> Check Status</button></div>
-        <div className="bg-gradient-to-br from-lime-400 to-green-500 p-8 rounded-3xl text-white shadow-lg shadow-lime-100 text-center"><h2 className="text-6xl font-bold">{currentDate.getDate()}</h2><p className="text-xl font-medium opacity-90 mt-2">{monthNames[currentDate.getMonth()]}</p><p className="text-lg opacity-75">{currentDate.getFullYear()}</p></div>
-        <div className="bg-white p-6 rounded-3xl border border-slate-100 shadow-sm"><h3 className="font-bold text-slate-800 mb-4">Schedule Key</h3><div className="space-y-3"><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-blue-500"></div> Meeting</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-orange-500"></div> Deadline</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-red-500"></div> Holiday</div><div className="flex items-center gap-3 text-sm text-slate-600"><div className="w-3 h-3 rounded-full bg-lime-500"></div> Available</div></div></div>
+      <div className="flex-1 bg-white rounded-3xl shadow-sm border border-slate-100 overflow-hidden relative">
+        <iframe 
+          src={googleCalendarEmbedUrl} 
+          style={{ border: 0, width: "100%", height: "100%", position: "absolute", top: 0, left: 0 }} 
+          frameBorder="0" 
+          scrolling="no"
+          title="Company Google Calendar"
+        ></iframe>
       </div>
-
-      {selectedDayInfo && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden animate-[scale-in_0.3s_ease-out]">
-            <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <h3 className="font-bold text-slate-800 flex items-center gap-2">
-                <CalendarIcon size={18} className="text-lime-600"/> 
-                {monthNames[currentDate.getMonth()]} {selectedDayInfo.day}, {currentDate.getFullYear()}
-              </h3>
-              <button onClick={() => setSelectedDayInfo(null)} className="p-2 hover:bg-slate-200 rounded-full transition-colors"><X size={18} className="text-slate-500"/></button>
-            </div>
-            
-            <div className="p-6 text-center space-y-4">
-              {selectedDayInfo.event ? (
-                <>
-                  <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-2 
-                    ${selectedDayInfo.event.type === 'meeting' ? 'bg-blue-100 text-blue-600' : 
-                      selectedDayInfo.event.type === 'deadline' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>
-                    {selectedDayInfo.event.type === 'meeting' ? <User size={28}/> : selectedDayInfo.event.type === 'deadline' ? <Clock size={28}/> : <AlertCircle size={28}/>}
-                  </div>
-                  <h4 className="text-xl font-bold text-slate-800">{selectedDayInfo.event.title}</h4>
-                  <p className="text-sm text-slate-500">{selectedDayInfo.event.desc}</p>
-                </>
-              ) : (
-                <>
-                  <div className="w-16 h-16 mx-auto rounded-full bg-lime-100 text-lime-600 flex items-center justify-center mb-2">
-                    <CheckCircle size={28}/>
-                  </div>
-                  <h4 className="text-xl font-bold text-slate-800">No Events Scheduled</h4>
-                  <p className="text-sm text-slate-500">This day is completely free.</p>
-                </>
-              )}
-              
-              <div className="pt-4 mt-4 border-t border-slate-100">
-                 <button 
-                   onClick={() => { setSelectedDayInfo(null); setActivePage('notifications'); }}
-                   className="w-full bg-lime-500 hover:bg-lime-600 text-slate-900 py-3 rounded-xl font-bold transition-all shadow-md flex items-center justify-center gap-2"
-                 >
-                   <Send size={18}/> Apply for Leave
-                 </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
@@ -189,7 +292,7 @@ const EditModal = ({ title, onClose, children }: any) => (
   </div>
 );
 
-// --- 3. DASHBOARD OVERVIEW (CONNECTED) ---
+// --- 3. DASHBOARD OVERVIEW ---
 const EmployeeDashboardOverview = ({ employeeData, setActivePage }: { employeeData: EmployeeData | null, setActivePage: (p: string) => void }) => {
   if (!employeeData) return <div className="p-10 text-slate-400 flex justify-center items-center"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-lime-500"></div></div>;
   
@@ -254,14 +357,12 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
   const [reason, setReason] = useState('');
   const [myRequests, setMyRequests] = useState<any[]>([]);
 
-  // Fetch real tickets from DB
   useEffect(() => {
     const loadTickets = async () => {
       if (!employeeData) return;
       try {
         const response = await fetchTickets();
         if (response.status === 'success') {
-           // Filter tickets only for THIS employee
            const myTix = response.data.filter((req: any) => req.employee_id === employeeData.id);
            setMyRequests(myTix);
         }
@@ -276,7 +377,6 @@ const NotificationsPage = ({ employeeData }: { employeeData: EmployeeData | null
     if (!employeeData) return alert("User data not loaded.");
 
     try {
-      // Create real ticket in MongoDB
       await createTicket({
         employee_id: employeeData.id,
         employee_name: employeeData.name,
@@ -391,7 +491,8 @@ const MyTeam = ({ currentUserId }: { currentUserId: string }) => {
   );
 };
 
-// --- 6. PAYSLIPS PAGE (No API changes needed for now) ---
+
+// --- 6. PAYSLIPS PAGE ---
 const EmployeePayslips = () => {
   return (
     <div className="w-full space-y-6 animate-fade-in-up">
@@ -481,6 +582,11 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [employeeData, setEmployeeData] = useState<EmployeeData | null>(null);
 
+  // LIFTED CHAT STATE: This ensures chat history persists when changing pages
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { id: 1, sender: 'ai', text: 'Hi! 👋 I am your Innvoix HR Assistant.\n\nI can help you with:\n• Checking leave balances\n• Applying for leave\n• Company policies\n\nHow can I help you today?' }
+  ]);
+
   // FETCH REAL DATA ON LOAD
   useEffect(() => {
     const loadData = async () => {
@@ -489,7 +595,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
         try {
           const res = await fetchUserProfile(userId);
           if (res.status === 'success') {
-            // Get custom image or generate one based on Name
             const savedImage = localStorage.getItem(`profile_pic_${res.data.id}`);
             const generatedAvatar = `https://ui-avatars.com/api/?name=${res.data.name}&background=84cc16&color=fff&size=150`;
 
@@ -518,7 +623,6 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
       const file = e.target.files[0];
       const reader = new FileReader();
       
-      // Convert image to Base64 and save to localStorage to persist across reloads
       reader.onloadend = () => {
         const base64String = reader.result as string;
         localStorage.setItem(`profile_pic_${employeeData.id}`, base64String);
@@ -531,7 +635,7 @@ const EmployeeDashboard: React.FC<EmployeeDashboardProps> = ({ onLogout }) => {
   const renderContent = () => {
     switch(activePage) {
       case 'dashboard': return <EmployeeDashboardOverview employeeData={employeeData} setActivePage={setActivePage} />;
-      case 'chat': return <AIChatPage userId={employeeData?.id || 'emp_001'} />; 
+      case 'chat': return <AIChatPage userId={employeeData?.id || 'emp_001'} messages={chatMessages} setMessages={setChatMessages} />; 
       case 'calendar': return <CalendarPage setActivePage={setActivePage} />; 
       case 'employees': return <MyTeam currentUserId={employeeData?.id || ''} />;
       case 'payroll': return <EmployeePayslips />;

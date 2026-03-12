@@ -3,7 +3,7 @@ import Sidebar from '../components/Sidebar';
 import { User, MapPin, Calendar, Shield, BellRing, CheckCircle, Search, Filter, MoreVertical, Plus, FileText, Clock, Upload, Briefcase, X, MessageSquare, ChevronRight, Bot, Send } from 'lucide-react';
 
 // IMPORT YOUR REAL API CALLS
-import { sendMessageToBackend, fetchTickets, updateTicketStatus, fetchAllEmployees, fetchUserProfile } from '../services/api';
+import { sendMessageToBackend, fetchTickets, updateTicketStatus, fetchAllEmployees, fetchUserProfile,uploadDocumentToBackend } from '../services/api';
 
 // --- 1. FULL PAGE AI CHAT COMPONENT (CONNECTED) ---
 const AIChatPage = ({ userId }: { userId: string }) => {

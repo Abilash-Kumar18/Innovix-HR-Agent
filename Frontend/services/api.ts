@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // IMPORTANT: Keep this as localhost while testing on your machine!
-const API_URL = "https://innovix-hr-agent.onrender.com"; 
+const API_URL = "http://127.0.0.1:8000"; 
 
 export const api = axios.create({
   baseURL: API_URL,
@@ -48,4 +48,25 @@ export const createTicket = async (data: any) => {
 export const updateTicketStatus = async (id: string, status: string) => {
   const res = await api.put(`/api/tickets/${id}`, { status });
   return res.data;
+};
+
+// --- FILE UPLOAD ---
+export const uploadDocumentToBackend = async (employeeId: string, documentType: string, file: File) => {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  try {
+    // FastAPI expects employee_id and document_type as query parameters here
+    const response = await api.post(
+      `/api/chat/upload_document?employee_id=${employeeId}&document_type=${encodeURIComponent(documentType)}`, 
+      formData, 
+      {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      }
+    );
+    return response.data;
+  } catch (error) {
+    console.error("❌ Upload Error:", error);
+    throw new Error("Failed to upload document.");
+  }
 };

@@ -8,7 +8,10 @@ from pydantic import BaseModel
 from motor.motor_asyncio import AsyncIOMotorClient
 from dotenv import load_dotenv
 from bson import ObjectId
+import json
+
 import uvicorn
+from app.agents.employee_agent import stream_agent_response
 
 # --- LangChain & Pinecone Imports ---
 from pinecone import Pinecone
@@ -17,13 +20,16 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 import base64
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 
 # --- Agent Imports ---
 from app.agents.employee_agent import get_agent_response
 
 # Ensure policy data folder exists
 os.makedirs("data/policies", exist_ok=True)
+
+
+
 
 # ==========================================
 # 1. DATABASE CONNECTION (Robust SSL Setup)
@@ -62,6 +68,10 @@ app.add_middleware(
 # ==========================================
 # 3. PYDANTIC MODELS (Merged)
 # ==========================================
+class StreamChatRequest(BaseModel):
+    message: str
+    employee_id: str
+    document_context: str = "" # Field to hold extracted text!
 class LoginRequest(BaseModel):
     email: str
     password: str
@@ -357,25 +367,51 @@ async def download_policy(policy_id: str):
 
 @app.post("/api/chat/upload_document")
 async def chat_document_upload(employee_id: str, document_type: str, file: UploadFile = File(...)):
-    """Allows employees to securely upload onboarding documents directly through the chat interface."""
     import base64
-    
-    # Read and encode the file into a secure string
     file_bytes = await file.read()
-    encoded_string = base64.b64encode(file_bytes).decode('utf-8')
     
-    # Save it to a highly secure collection
+    # Extract text if it's a PDF so the AI can read it!
+    extracted_text = ""
+    temp_path = f"data/policies/temp_{file.filename}"
+    try:
+        with open(temp_path, "wb") as f:
+            f.write(file_bytes)
+            
+        if file.filename.lower().endswith('.pdf'):
+            loader = PyPDFLoader(temp_path)
+            docs = loader.load()
+            extracted_text = "\n".join([doc.page_content for doc in docs])
+        else:
+            extracted_text = file_bytes.decode('utf-8', errors='ignore')
+    except Exception as e:
+        print(f"Could not extract text: {e}")
+    finally:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+    
+    # Save secure Base64 to MongoDB vault
+    encoded_string = base64.b64encode(file_bytes).decode('utf-8')
     await db.employee_documents.insert_one({
         "employee_id": employee_id,
-        "document_type": document_type, # e.g., "Government ID", "Tax Form"
+        "document_type": document_type, 
         "filename": file.filename,
         "file_data": encoded_string,
         "upload_date": datetime.datetime.utcnow(),
-        "viewed_by_hr": False
     })
     
-    # We return a message that the React chat can display as an AI response!
-    return {"status": "success", "message": f"Document '{file.filename}' securely uploaded to your HR vault."}
+    # Return the extracted text to React so it can inject it into the prompt!
+    return {
+        "status": "success", 
+        "message": f"Document '{file.filename}' secured in vault.",
+        "extracted_text": extracted_text 
+    }
+# --- 1. NEW REAL-TIME STREAMING ENDPOINT ---
+@app.post("/api/chat/stream")
+async def chat_stream_endpoint(request: StreamChatRequest):
+    return StreamingResponse(
+        stream_agent_response(request.message, request.employee_id, request.document_context), 
+        media_type="text/event-stream"
+    )
 
 if __name__ == "__main__":
     uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)
