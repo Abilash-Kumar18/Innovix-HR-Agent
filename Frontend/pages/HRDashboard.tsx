@@ -8,7 +8,7 @@ import { sendMessageToBackend, fetchTickets, updateTicketStatus, fetchAllEmploye
 // --- 1. FULL PAGE AI CHAT COMPONENT (CONNECTED) ---
 const AIChatPage = ({ userId }: { userId: string }) => {
   const [messages, setMessages] = useState([
-    { id: 1, sender: 'ai', text: 'Hello! 👋 I am your HR Copilot. I can help you draft new policies, check compliance, onboard employees, or analyze data. What do you need?' }
+    { id: 1, sender: 'ai', text: 'Hello!. What do you need?' }
   ]);
   const [inputText, setInputText] = useState('');
   const [loading, setLoading] = useState(false);
@@ -42,7 +42,7 @@ const AIChatPage = ({ userId }: { userId: string }) => {
           <Bot size={24} />
         </div>
         <div>
-          <h2 className="text-xl font-bold text-slate-800">HR Copilot</h2>
+          <h2 className="text-xl font-bold text-slate-800">CoHR</h2>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
             <span className="text-sm text-slate-500">{loading ? 'Typing...' : 'Online • Admin Access Granted'}</span>
