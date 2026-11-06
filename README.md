@@ -2,8 +2,6 @@
 ```markdown
 # 🚀 Innvoix HR Agentic AI
 
-**Built for TN Impact Hackathon (Problem Statement: TNI26075)**
-
 An intelligent, autonomous "Agentic AI" platform designed to eliminate repetitive HR administrative tasks. Innvoix goes beyond simple chatbots by acting as an orchestration layer—it understands complex HR policies, converses with employees naturally, makes compliance decisions, and autonomously triggers cross-system workflows (HRIS, IT ticketing, LMS, and Payroll) within strict, Role-Based Guardrails.
 
 ---
