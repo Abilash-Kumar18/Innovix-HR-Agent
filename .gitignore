@@ -1,6 +1,4 @@
-# =========================
-# BACKEND (Python / FastAPI)
-# =========================
+
 __pycache__/
 *.pyc
 *.pyo
@@ -16,9 +14,7 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# =========================
-# OS & EDITORS
-# =========================
+
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
