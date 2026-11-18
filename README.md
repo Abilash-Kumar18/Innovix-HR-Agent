@@ -122,12 +122,3 @@ Drafting policies and instantly propagating them to the affected teams.
 ## ☁️ Deployment Notes (Render)
 
 This application is designed to be fully cloud-resilient. Because PaaS providers like Render utilize Ephemeral File Systems (wiping local files on restart), our architecture utilizes **Base64 Encoding** to store uploaded PDF Policy documents directly inside MongoDB. This guarantees that the source-of-truth HR documents and their vector embeddings survive all server restarts.
-
-
-***
-
-This README tells a complete, compelling story about *why* your software is impressive, not just what it does. 
-
-Since your backend is locked and loaded, what is the game plan for the React frontend? Do you need the Axios integration code to connect the React Chat UI to your `/chat` endpoint, or the file upload component for the HR dashboard?
-
-```
