@@ -123,11 +123,6 @@ Drafting policies and instantly propagating them to the affected teams.
 
 This application is designed to be fully cloud-resilient. Because PaaS providers like Render utilize Ephemeral File Systems (wiping local files on restart), our architecture utilizes **Base64 Encoding** to store uploaded PDF Policy documents directly inside MongoDB. This guarantees that the source-of-truth HR documents and their vector embeddings survive all server restarts.
 
----
-
-*Built with ❤️ by the Innvoix Team for TN Impact 2026.*
-
-```
 
 ***
 
